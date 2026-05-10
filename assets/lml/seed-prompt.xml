@@ -19,7 +19,7 @@
 	<label wrap="true" colspan="3" width="500" id="label" align="top" />
 	<:row />
 	<textfield id="input" row="true" expandx="true" padtop="30" width="400"
-		height="40" colspan="3" fillx="" />
+		height="40" colspan="3" fillx="" style="default" />
 	<:row />
 	<image style="button" height="1" colspan="3" width="500" />
 	<:row uniform="true" spaceleft="15" spaceright="15" spacetop="30" fillx="true"
