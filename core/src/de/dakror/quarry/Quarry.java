@@ -177,6 +177,13 @@ public class Quarry extends GameBase implements PlatformInterface {
         return "en";
     }
 
+    public String getLanguageLabel() {
+        String language = getLanguageCode();
+        if ("de".equals(language)) return "DE";
+        if ("zh".equals(language)) return "中文";
+        return "EN";
+    }
+
     @Override
     public void pause() {
         // wait for saving to complete until pause is allowed

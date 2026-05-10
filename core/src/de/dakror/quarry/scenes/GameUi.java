@@ -277,6 +277,9 @@ public class GameUi implements Ui {
     public SeedPrompt seedPrompt;
     public ItemSelection itemSelection;
     LayerSelection layerSelection;
+    Table remoteCursorHud;
+    Label remoteCursorHudLabel;
+    String remoteCursorHudText = "";
     TileUI tileUI;
     public Menu menu;
 
@@ -401,6 +404,16 @@ public class GameUi implements Ui {
         layerSelection.setName("layerSelection");
         stage.addActor(layerSelection);
         layerSelection.setX(layerSelection.getX() + 40);
+
+        remoteCursorHud = new Table();
+        remoteCursorHud.setBackground(getDrawable(Quarry.Q.skin, "panel_metalDark", 12, 12, 12, 12));
+        remoteCursorHud.pad(8);
+        remoteCursorHudLabel = new Label("", skin, "small");
+        remoteCursorHudLabel.setAlignment(Align.left);
+        remoteCursorHud.add(remoteCursorHudLabel).left();
+        remoteCursorHud.setVisible(false);
+        stage.addActor(remoteCursorHud);
+        remoteCursorHud.setPosition(20, Const.UI_H - 20);
 
         // parse but do not care about return
         Util.lml("buttons");
@@ -2299,6 +2312,7 @@ public class GameUi implements Ui {
         tutorial.update();
 
         updateResources(false);
+        updateRemoteCursorHud();
 
         /*System.out.println(String.format("FPS: %d\nUpd-time: %.2fms\nDraw-time: %.2fms",
                 Gdx.graphics.getFramesPerSecond(),
@@ -2315,6 +2329,9 @@ public class GameUi implements Ui {
 
     public void resize(int width, int height) {
         stage.getViewport().update(width, height);
+        if (remoteCursorHud != null) {
+            remoteCursorHud.setPosition(20, height - remoteCursorHud.getHeight() - 20);
+        }
     }
 
     @Override
@@ -2332,6 +2349,50 @@ public class GameUi implements Ui {
         copyButton.setVisible(Game.G.hasScience(ScienceType.Blueprints));
         menu.onScienceChange();
         layerSelection.onScienceChange();
+    }
+
+    private void updateRemoteCursorHud() {
+        if (remoteCursorHud == null || Game.G == null || Game.G.lanSession == null) {
+            if (remoteCursorHud != null) {
+                remoteCursorHud.setVisible(false);
+            }
+            return;
+        }
+
+        Collection<Game.RemoteCursorState> cursors = Game.G.getRemoteCursorSnapshot();
+        if (cursors.isEmpty()) {
+            remoteCursorHudText = "";
+            remoteCursorHud.setVisible(false);
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (Game.RemoteCursorState cursor : cursors) {
+            if (cursor.clientId == Game.G.lanSession.getLocalClientId()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            String id = Long.toHexString(cursor.clientId);
+            sb.append('#').append(id.substring(Math.max(0, id.length() - 4)).toUpperCase());
+            sb.append(" L").append(cursor.layer);
+            sb.append(" ");
+            if (cursor.tileX < 0 || cursor.tileY < 0) {
+                sb.append("(off)");
+            } else {
+                sb.append('(').append(cursor.tileX).append(", ").append(cursor.tileY).append(')');
+            }
+        }
+
+        String text = sb.toString();
+        if (!text.equals(remoteCursorHudText)) {
+            remoteCursorHudText = text;
+            remoteCursorHudLabel.setText(text);
+            remoteCursorHud.pack();
+            remoteCursorHud.setPosition(20, Const.UI_H - remoteCursorHud.getHeight() - 20);
+        }
+        remoteCursorHud.setVisible(true);
     }
 
     ///////////////////////////////

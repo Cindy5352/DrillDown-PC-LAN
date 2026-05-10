@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.math.Interpolation;
@@ -403,17 +404,27 @@ public class Menu {
                                 save(new Callback<Void>() {
                                     @Override
                                     public void call(Void data1) {
+                                        Gdx.app.postRunnable(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                menuButton.setChecked(false);
+                                                Game.G.reset();
+                                                Quarry.Q.addScene(MainMenu.M);
+                                                Quarry.Q.dropScene(Game.G);
+                                            }
+                                        });
+                                    }
+                                });
+                            } else {
+                                Gdx.app.postRunnable(new Runnable() {
+                                    @Override
+                                    public void run() {
                                         menuButton.setChecked(false);
                                         Game.G.reset();
                                         Quarry.Q.addScene(MainMenu.M);
                                         Quarry.Q.dropScene(Game.G);
                                     }
                                 });
-                            } else {
-                                menuButton.setChecked(false);
-                                Game.G.reset();
-                                Quarry.Q.addScene(MainMenu.M);
-                                Quarry.Q.dropScene(Game.G);
                             }
                         }
                     }
@@ -423,6 +434,7 @@ public class Menu {
 
         final TextButton de = Util.id("lang");
         de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
+        de.setText(Quarry.Q.getLanguageLabel());
         de.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -434,6 +446,7 @@ public class Menu {
                 });
                 Quarry.Q.setLanguageCode(Quarry.Q.nextLanguageCode());
                 de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
+                de.setText(Quarry.Q.getLanguageLabel());
             }
         });
 

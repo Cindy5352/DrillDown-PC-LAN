@@ -180,6 +180,7 @@ public class MainMenu extends Scene implements Ui {
 
         final TextButton de = Util.id("lang");
         de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
+        de.setText(Quarry.Q.getLanguageLabel());
         de.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -190,6 +191,7 @@ public class MainMenu extends Scene implements Ui {
                 });
                 Quarry.Q.setLanguageCode(Quarry.Q.nextLanguageCode());
                 de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
+                de.setText(Quarry.Q.getLanguageLabel());
             }
         });
 
