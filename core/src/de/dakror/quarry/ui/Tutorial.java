@@ -164,7 +164,8 @@ public class Tutorial {
         int[][] heights = { { 400, 480 }, { 330, 330 }, { 250, 330 }, { 230, 300 }, { 370, 370 }, { 380, 400 }, {},
                 { 300, 270 }, { 430, 520 }, { 330, 330 }, { 300, 300 }, { 440, 480 }, { 440, 440 }, { 440, 440 } };
 
-        int l = Quarry.Q.i18n.getLocale().getLanguage().equals(new Locale("de").getLanguage()) ? 1 : 0;
+        String language = Quarry.Q.getLanguageCode();
+        int l = "de".equals(language) ? 1 : 0;
 
         steps.add(new Step((Const.UI_W - 600) / 2, (Const.UI_H - heights[0][l]) / 2, 600, heights[0][l], true, true) {
             @Override

@@ -68,6 +68,7 @@ import de.dakror.common.libgdx.render.DepthSpriter;
 import de.dakror.common.libgdx.ui.Scene;
 import de.dakror.quarry.Const;
 import de.dakror.quarry.Quarry;
+import de.dakror.quarry.net.LanSession;
 import de.dakror.quarry.game.Generator;
 import de.dakror.quarry.game.Layer;
 import de.dakror.quarry.game.LoadingCompat;
@@ -109,6 +110,8 @@ public class MainMenu extends Scene implements Ui {
     public Alert alert;
     public Prompt prompt;
     public SeedPrompt seedPrompt;
+    TextButton loadGame;
+    boolean lanHostMode;
 
     int uResolution, uChannel, uDirection;
 
@@ -175,8 +178,8 @@ public class MainMenu extends Scene implements Ui {
         seedPrompt = Util.lml("seed-prompt");
         stage.addActor(toast);
 
-        final ImageButton de = Util.id("lang");
-        de.setChecked(Quarry.Q.i18n.getLocale().getLanguage().equals("en"));
+        final TextButton de = Util.id("lang");
+        de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
         de.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -185,7 +188,8 @@ public class MainMenu extends Scene implements Ui {
                     @Override
                     public void call(Void data) {}
                 });
-                Quarry.Q.prefs.putBoolean("german", !de.isChecked()).flush();
+                Quarry.Q.setLanguageCode(Quarry.Q.nextLanguageCode());
+                de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
             }
         });
 
@@ -216,6 +220,83 @@ public class MainMenu extends Scene implements Ui {
             }
         });
         Util.id("new_game").addCaptureListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Quarry.Q.sound.play(Quarry.Q.clickSfx);
+            }
+        });
+
+        final TextButton lanHost = Util.id("lan_host");
+        lanHost.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Quarry.Q.sound.play(Quarry.Q.clickSfx);
+                lanHostMode = true;
+                loadGame.setChecked(true);
+            }
+        });
+        lanHost.addCaptureListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Quarry.Q.sound.play(Quarry.Q.clickSfx);
+            }
+        });
+
+        final TextButton lanJoin = Util.id("lan_join");
+        lanJoin.addListener(new ClickListener() {
+            @Override
+            public void clicked(InputEvent event, float x, float y) {
+                Quarry.Q.sound.play(Quarry.Q.clickSfx);
+                prompt.show(MainMenu.this, Quarry.Q.i18n.get("prompt.lan_join"),
+                        "127.0.0.1:" + LanSession.DEFAULT_PORT, new Response<String, Boolean>() {
+                            @Override
+                            public Boolean call(String data) {
+                                if (data != null && data.trim().length() > 0) {
+                                    String host = data.trim();
+                                    int port = LanSession.DEFAULT_PORT;
+                                    int idx = host.lastIndexOf(':');
+                                    if (idx > 0) {
+                                        try {
+                                            port = Integer.parseInt(host.substring(idx + 1));
+                                            host = host.substring(0, idx);
+                                        } catch (NumberFormatException ignored) {
+                                            port = LanSession.DEFAULT_PORT;
+                                        }
+                                    }
+                                    final String targetHost = host;
+                                    final int targetPort = port;
+                                    modalOverlay.toFront();
+                                    modalOverlay.addAction(sequence(visible(true), alpha(0.4f, 0.25f, Interpolation.fade)));
+                                    toast.show(Quarry.Q.i18n.get("toast.loading_game"));
+                                    Quarry.Q.threadPool.execute(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            Game.G.joinLanClient(targetHost, targetPort, new Callback<Object>() {
+                                                @Override
+                                                public void call(Object result) {
+                                                    modalOverlay.addAction(sequence(alpha(0, 0.25f, Interpolation.fade), visible(false)));
+                                                    if (result instanceof Boolean && (Boolean) result == true) {
+                                                        Game.G.ui.pauseButton.setChecked(true);
+                                                        Game.G.setPaused(true);
+                                                        fadeOut = true;
+                                                        newGame = false;
+                                                    } else if (result instanceof Boolean && (Boolean) result == false) {
+                                                        toast.show(Quarry.Q.i18n.get("toast.game_not_loaded"));
+                                                    } else if (result instanceof Exception) {
+                                                        Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, result);
+                                                        toast.show(Quarry.Q.i18n.get("toast.game_not_loaded"));
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    });
+                                }
+                                return true;
+                            }
+                        });
+            }
+        });
+        lanJoin.addCaptureListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Quarry.Q.sound.play(Quarry.Q.clickSfx);
@@ -253,7 +334,7 @@ public class MainMenu extends Scene implements Ui {
             }
         });
 
-        final TextButton loadGame = Util.id("load_game");
+        loadGame = Util.id("load_game");
         loadGame.addCaptureListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -334,6 +415,10 @@ public class MainMenu extends Scene implements Ui {
                                                 if (data instanceof Boolean && (Boolean) data == true) {
                                                     Game.G.ui.pauseButton.setChecked(true);
                                                     Game.G.setPaused(true);
+                                                    if (lanHostMode) {
+                                                        Game.G.startLanHost(LanSession.DEFAULT_PORT);
+                                                        lanHostMode = false;
+                                                    }
 
                                                     ((TextButton) actor).setChecked(false);
                                                     fadeOut = true;
@@ -406,22 +491,6 @@ public class MainMenu extends Scene implements Ui {
             }
         });
 
-        final TextButton selectExternal = Util.id("select_external");
-        selectExternal.addCaptureListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                Quarry.Q.sound.play(Quarry.Q.clickSfx);
-            }
-        });
-        selectExternal.addListener(new ClickListener() {
-            @Override
-            public void clicked(InputEvent event, float x, float y) {
-                Quarry.Q.pi.message(Const.MSG_SELECT_ROOT, null);
-                ((TextButton) event.getListenerActor()).setChecked(false);
-            }
-        });
-        selectExternal.setVisible(Quarry.Q.newAndroid);
-
         if (Gdx.app.getType() == ApplicationType.iOS) {
             Util.id("quit_game").setVisible(false);
         } else {
@@ -445,6 +514,7 @@ public class MainMenu extends Scene implements Ui {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 loadGame.setChecked(false);
+                lanHostMode = false;
             }
         });
         stage.addActor(overlay);

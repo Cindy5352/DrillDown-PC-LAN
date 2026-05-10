@@ -1,1 +1,0 @@
-gradlew android:assembleFullRelease android:installFullRelease && gradlew android:run

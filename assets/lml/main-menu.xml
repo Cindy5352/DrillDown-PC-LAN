@@ -26,13 +26,16 @@
 		<textbutton row="true" id="load_game" text="@menu.load_game"
 			style="main_menu_item" />
 
-		<textbutton row="true" id="select_external" text="@menu.select_external"
-			style="main_menu_item" visible="false" />
+		<textbutton row="true" id="lan_host" text="@menu.lan_host"
+			style="main_menu_item" />
+
+		<textbutton row="true" id="lan_join" text="@menu.lan_join"
+			style="main_menu_item" />
 
 		<table row="true" background="button-black">
 			<volumebutton id="sfx" height="50" style="sound" expand="true"
 				padLeft="100" />
-			<imagebutton id="lang" height="50" style="lang" expand="true" />
+			<textbutton id="lang" height="50" style="main_menu_item" text="中文" expand="true" />
 			<volumebutton id="music" height="50" style="music" expand="true"
 				padRight="100" />
 		</table>

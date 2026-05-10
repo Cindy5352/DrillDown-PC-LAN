@@ -74,21 +74,16 @@ public class Quarry extends GameBase implements PlatformInterface {
     public final int versionNumber;
     public final String version;
 
-    public boolean newAndroid;
-
-    private int filePermissionState;
-
     public Sound clickSfx;
 
     public ExecutorService threadPool = Executors.newSingleThreadExecutor();//newCachedThreadPool();
 
     public Quarry(PlatformInterface pi, boolean fullVersion, int versionNumber, String version, boolean desktop,
-            boolean newAndroid, WindowMode mode) {
+            WindowMode mode) {
         super(mode, desktop, pi);
         this.fullVersion = fullVersion;
         this.versionNumber = versionNumber;
         this.version = version;
-        this.newAndroid = newAndroid;
     }
 
     public boolean isVersion() {
@@ -131,7 +126,7 @@ public class Quarry extends GameBase implements PlatformInterface {
         prefs = Gdx.app.getPreferences("TheQuarry");
 
         i18n = new I18NBundleDelegate(I18NBundle.createBundle(Gdx.files.internal("i18n/TheQuarry"),
-                prefs.getBoolean("german", false) ? Locale.GERMAN : Locale.ENGLISH));
+                getLocale()));
 
         // backwards compat
         try {
@@ -152,6 +147,34 @@ public class Quarry extends GameBase implements PlatformInterface {
         Scene s = new LoadingScreen();
         s.init();
         addScene(s);
+    }
+
+    public Locale getLocale() {
+        String language = prefs.getString("language", null);
+        if (language == null || language.isEmpty()) {
+            return prefs.getBoolean("german", false) ? Locale.GERMAN : Locale.ENGLISH;
+        }
+
+        if ("de".equals(language)) return Locale.GERMAN;
+        if ("zh".equals(language)) return new Locale("zh");
+        return Locale.ENGLISH;
+    }
+
+    public String getLanguageCode() {
+        return getLocale().getLanguage();
+    }
+
+    public void setLanguageCode(String language) {
+        prefs.putString("language", language);
+        prefs.putBoolean("german", "de".equals(language));
+        prefs.flush();
+    }
+
+    public String nextLanguageCode() {
+        String language = getLanguageCode();
+        if ("en".equals(language)) return "de";
+        if ("de".equals(language)) return "zh";
+        return "en";
     }
 
     @Override
@@ -245,50 +268,29 @@ public class Quarry extends GameBase implements PlatformInterface {
     }
 
     public FileHandle file(String text, boolean write) {
-        if (hasFilePerm()) {
-            FileHandle local = Gdx.files.local(text);
+        FileHandle local = Gdx.files.local(text);
 
-            // if folder creation fails, go internal
-            FileHandle fh = Gdx.files.external("TheQuarry/saves");
-            fh.mkdirs();
-            if (!fh.exists()) {
-                return local;
-            }
-
-            FileHandle external = Gdx.files.external(text);
-
-            if (write) {
-                return external;
-            } else if (local.exists()) {
-                return local.lastModified() > external.lastModified() ? local : external;
-            } else {
-                return external;
-            }
-        } else
-            return Gdx.files.local(text);
-    }
-
-    private boolean hasFilePerm() {
-        if (newAndroid)
-            return true;
-
-        filePermissionState = -1;
-        if ((Boolean) pi.message(Const.MSG_FILE_PERMISSION, null) == false) {
-            return false;
-        } else {
-            filePermissionState = 1;
+        // Prefer external saves on PC, but keep local as a fallback.
+        FileHandle externalRoot = Gdx.files.external("TheQuarry/saves");
+        externalRoot.mkdirs();
+        if (!externalRoot.exists()) {
+            return local;
         }
 
-        return filePermissionState == 1;
+        FileHandle external = Gdx.files.external(text);
+
+        if (write) {
+            return external;
+        } else if (local.exists()) {
+            return local.lastModified() > external.lastModified() ? local : external;
+        } else {
+            return external;
+        }
     }
 
     @Override
     public Object message(int messageCode, Object payload) {
         switch (messageCode) {
-            case Const.MSG_FILE_PERMISSION: {
-                filePermissionState = (Boolean) payload ? 1 : 0;
-                break;
-            }
         }
 
         return null;

@@ -50,7 +50,7 @@ public class SeedPrompt extends Window implements CustomTag {
         text = Util.id("label");
         getTitleTable().padTop(50);
         input = Util.id("input");
-        input.setOnlyFontChars(true);
+        input.setOnlyFontChars(false);
         Util.id("paste").addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {

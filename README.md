@@ -1,13 +1,30 @@
 # Drill Down
 
-This is the open-sourced codebase of the factory building game Drill Down, released in 2019 on Steam and Google Play. 
+Drill Down is a Java/libGDX factory game codebase focused on PC play and LAN multiplayer.
 
-Binaries for Android and PC are available at [itch.io](https://dakror.itch.io/drill-down).
+## Current Scope
+- PC-only runtime
+- LAN host/client multiplayer
+- Host-authoritative sync model
 
-## Building from source
+## Project Layout
+- `core/` - game logic, scenes, UI, structures, and network code.
+- `desktop/` - desktop launcher and desktop-specific build/runtime code.
+- `commons/` - shared utility and annotation modules.
+- `gdx-sfx/` - shared audio support.
+- `assets/` - shared game resources.
 
-The game needs 64-bit Java >= 11 and Android Studio to compile.
+## Main Entry Points
+- Desktop launcher: `de.dakror.quarry.desktop.DesktopLauncher`
+- LAN host: `de.dakror.quarry.scenes.Game.startLanHost(...)`
+- LAN join: `de.dakror.quarry.scenes.Game.joinLanClient(...)`
 
-1. Create a java keystore for code signing
-2. Enter the credentials into `gradle.properties`
-3. For Android run `gradlew android:assembleFullRelease`, for PC run `gradlew desktop:dist` to get the runnable binaries
+## Build
+Use Gradle from the repository root:
+
+- `./gradlew desktop:run` for a local desktop run
+- `./gradlew desktop:dist` for a distributable desktop build
+
+## Notes
+- The codebase uses a host-authoritative LAN flow with snapshot join and command sync.
+- Android-specific entry points and mobile resource paths have been removed from the active PC setup.

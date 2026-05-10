@@ -125,6 +125,7 @@ import de.dakror.quarry.structure.base.Direction;
 import de.dakror.quarry.structure.base.Dock;
 import de.dakror.quarry.structure.base.Dock.DockType;
 import de.dakror.quarry.structure.base.FluidTubeStructure;
+import de.dakror.quarry.structure.base.IFlippable;
 import de.dakror.quarry.structure.base.IRotatable;
 import de.dakror.quarry.structure.base.ProducerStructure;
 import de.dakror.quarry.structure.base.RecipeList.Recipe;
@@ -161,6 +162,8 @@ import de.dakror.quarry.structure.producer.OilWell;
 import de.dakror.quarry.structure.storage.Barrel;
 import de.dakror.quarry.structure.storage.Storage;
 import de.dakror.quarry.structure.storage.Tank;
+import de.dakror.quarry.net.LanSession;
+import de.dakror.quarry.net.LanSnapshot;
 import de.dakror.quarry.util.Bounds;
 import de.dakror.quarry.util.QuarrySoundPlayer;
 import de.dakror.quarry.util.SpriterDelegateBatch;
@@ -198,38 +201,7 @@ public class Game extends GameScene {
         }
 
         public void deleteStructure(Structure<?> s) {
-            if (s instanceof CopperCable) {
-                layer.removeCable((CopperCable) s);
-            } else {
-                layer.removeStructure(s);
-            }
-
-            // remove attached hoppers
-            int removedHoppers = layer.removeAttachedHoppers(s);
-
-            if (Quarry.Q.sound.isPlaySound()) {
-                destroySfx.play(Quarry.Q.sound.getSoundVolume(), (float) (Math.random() * 0.2 + 0.8), 0);
-            }
-
-            Items costs = s.getSchema().buildCosts;
-            for (Amount e : costs.entries) {
-                if (e.getAmount() > 1)
-                    addResources(e.getItem(), (int) Math.ceil(e.getAmount()
-                            * (hasScience(ScienceType.ConsiderateConstruction) ? Const.REFUND_CONSIDERATE_PERCENTAGE
-                                    : Const.REFUND_PERCENTAGE)),
-                            true);
-            }
-
-            // refund hoppers
-
-            costs = Hopper.classSchema.buildCosts;
-            for (Amount e : costs.entries) {
-                if (e.getAmount() > 1)
-                    addResources(e.getItem(), (int) Math.ceil(e.getAmount() * removedHoppers
-                            * (hasScience(ScienceType.ConsiderateConstruction) ? Const.REFUND_CONSIDERATE_PERCENTAGE
-                                    : Const.REFUND_PERCENTAGE)),
-                            true);
-            }
+            Game.this.removeStructureInternal(s, true, true);
         }
 
         @Override
@@ -1331,63 +1303,7 @@ public class Game extends GameScene {
         }
 
         protected void placeStructure(Layer currentLayer, Structure<?> structure) {
-            if (currentLayer.addStructure(structure)) {
-                if (!GOD_MODE) {
-                    Items costs = structure.getSchema().buildCosts;
-
-                    for (Amount e : costs.entries) {
-                        removeResources(e.getItem(), e.getAmount(), true);
-                    }
-                }
-
-                synchronized (highlightLock) {
-                    if (tutorialHighlight.size > 0) {
-                        for (int i = 0; i < structure.getWidth(); i++) {
-                            for (int j = 0; j < structure.getHeight(); j++) {
-                                tutorialHighlight.remove((i + structure.x) * currentLayer.height + (j + structure.y));
-                            }
-                        }
-                    }
-                }
-
-                if (!structure.getSchema().has(Flags.NoDustEffect)) {
-                    // pfx
-                    for (int i = 0; i < structure.getWidth(); i++) {
-                        PooledEffect effect = dustPfxD.obtain();
-                        effect.reset();
-                        effect.setPosition(Const.TILE_SIZE * (structure.x + i), Const.TILE_SIZE * structure.y);
-                        effect.setDuration(10);
-                        layer.addParticleEffect(effect, true);
-
-                        effect = dustPfxU.obtain();
-                        effect.reset();
-                        effect.setPosition(Const.TILE_SIZE * (structure.x + i),
-                                Const.TILE_SIZE * (structure.y + structure.getHeight()));
-                        effect.setDuration(10);
-                        currentLayer.addParticleEffect(effect, true);
-                    }
-
-                    for (int i = 0; i < structure.getHeight(); i++) {
-                        PooledEffect effect = dustPfxL.obtain();
-                        effect.reset();
-                        effect.setPosition(Const.TILE_SIZE * structure.x, Const.TILE_SIZE * (structure.y + i));
-                        effect.setDuration(10);
-                        layer.addParticleEffect(effect, true);
-
-                        effect = dustPfxR.obtain();
-                        effect.reset();
-                        effect.setPosition(Const.TILE_SIZE * (structure.x + structure.getWidth()),
-                                Const.TILE_SIZE * (structure.y + i));
-                        effect.setDuration(10);
-                        currentLayer.addParticleEffect(effect, true);
-                    }
-                }
-
-                //                spatializedPlayer.play(structure, buildSfx, (float) (Math.random() * 0.4 + 0.6), false);
-                if (Quarry.Q.sound.isPlaySound()) {
-                    buildSfx.play(Quarry.Q.sound.getSoundVolume(), (float) (Math.random() * 0.4 + 0.6), 0);
-                }
-            }
+            Game.this.placeStructureInternal(currentLayer, structure, true, true);
         }
 
         @Override
@@ -1506,6 +1422,10 @@ public class Game extends GameScene {
     static final Bounds tempBounds = new Bounds();
 
     public static Game G;
+    public LanSession lanSession;
+    private boolean lanApplyingCommand;
+    private boolean lanHostPending;
+    private int lanHostPort = LanSession.DEFAULT_PORT;
     Batch batch;
     BatchDelegate delegate;
     OrthographicCamera cam;
@@ -1916,11 +1836,351 @@ public class Game extends GameScene {
 
         layerChangeNotifier.notify(Type.RESET, layer);
 
+        if (lanHostPending) {
+            try {
+                closeLanSession();
+                lanSession = LanSession.startHost(this, lanHostPort);
+            } catch (IOException e) {
+                Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+            } finally {
+                lanHostPending = false;
+            }
+        }
+
         lastTimerStart = System.currentTimeMillis();
     }
 
     public void startNewGame() {
         startNewGame = true;
+    }
+
+    public void requestLanHost(int port) {
+        lanHostPending = true;
+        lanHostPort = port;
+    }
+
+    public void joinLanClient(String host, int port, Callback<Object> callback) {
+        try {
+            closeLanSession();
+            lanSession = LanSession.connect(this, host, port, callback);
+        } catch (IOException e) {
+            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+            if (callback != null) {
+                callback.call(e);
+            }
+        }
+    }
+
+    public void startLanHost(int port) {
+        try {
+            closeLanSession();
+            lanSession = LanSession.startHost(this, port);
+        } catch (IOException e) {
+            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+        }
+    }
+
+    public boolean isLanHost() {
+        return lanSession != null && lanSession.isHost();
+    }
+
+    public boolean isLanClient() {
+        return lanSession != null && lanSession.isClient();
+    }
+
+    public void closeLanSession() {
+        if (lanSession != null) {
+            lanSession.close();
+            lanSession = null;
+        }
+    }
+
+    public void emitLanCommand(CompoundTag command) {
+        if (lanSession == null || lanApplyingCommand) {
+            return;
+        }
+
+        if (lanSession.isHost()) {
+            lanSession.broadcastCommand(command, 0);
+        } else {
+            lanSession.sendCommand(command);
+        }
+    }
+
+    public void applyLanCommand(CompoundTag command) {
+        String kind = command.String("kind", "");
+        boolean old = lanApplyingCommand;
+        lanApplyingCommand = true;
+        try {
+            if ("pause".equals(kind)) {
+                setPaused(command.Byte("paused", (byte) 0) == 1);
+                if (ui != null) {
+                    ui.pauseButton.setChecked(isPaused());
+                }
+            } else if ("speed".equals(kind)) {
+                gameSpeed = command.Int("speed", 1);
+            } else if ("build".equals(kind) || "build_batch".equals(kind)) {
+                applyLanBuildBatch(command);
+            } else if ("destroy".equals(kind)) {
+                applyLanDestroy(command);
+            } else if ("rotate".equals(kind)) {
+                applyLanRotate(command);
+            } else if ("flip".equals(kind)) {
+                applyLanFlip(command);
+            }
+        } finally {
+            lanApplyingCommand = old;
+        }
+    }
+
+    protected void applyLanBuildBatch(CompoundTag command) {
+        try {
+            Layer targetLayer = getLayer(command.Int("layer", layerIndex));
+            ListTag list = command.List("structures");
+            for (Tag t : list.data) {
+                Structure<?> s = Structure.load((CompoundTag) t);
+                if (s != null) {
+                    placeStructureInternal(targetLayer, s, false, true);
+                }
+            }
+        } catch (Exception e) {
+            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+        }
+    }
+
+    protected void applyLanDestroy(CompoundTag command) {
+        Layer targetLayer = getLayer(command.Int("layer", layerIndex));
+        int x = command.Int("x", -1);
+        int y = command.Int("y", -1);
+        if (x < 0 || y < 0) return;
+
+        Structure<?> s = targetLayer.getStructure(x, y);
+        if (s != null) {
+            removeStructureInternal(s, false, true);
+        }
+    }
+
+    protected void applyLanRotate(CompoundTag command) {
+        Layer targetLayer = getLayer(command.Int("layer", layerIndex));
+        int x = command.Int("x", -1);
+        int y = command.Int("y", -1);
+        if (x < 0 || y < 0) return;
+
+        Structure<?> s = targetLayer.getStructure(x, y);
+        if (s instanceof IRotatable) {
+            ((IRotatable) s).rotate();
+            camControl.updateActiveElementPlaceable();
+        }
+    }
+
+    protected void applyLanFlip(CompoundTag command) {
+        Layer targetLayer = getLayer(command.Int("layer", layerIndex));
+        int x = command.Int("x", -1);
+        int y = command.Int("y", -1);
+        if (x < 0 || y < 0) return;
+
+        Structure<?> s = targetLayer.getStructure(x, y);
+        if (s instanceof IFlippable) {
+            ((IFlippable) s).flip();
+            camControl.updateActiveElementPlaceable();
+        }
+    }
+
+    public CompoundTag snapshotStructure(Structure<?> structure) {
+        Builder b = new Builder(null);
+        structure.save(b);
+        CompoundTag tag = b.Get();
+        return tag;
+    }
+
+    public LanSnapshot exportLanSnapshot() {
+        try {
+            long snapshotPlayTime = getPlayTime();
+            Builder metaBuilder = new Builder("Meta");
+
+            metaBuilder
+                    .Byte("version", Const.QSF_VERSION)
+                    .Int("build", Quarry.Q.versionNumber)
+                    .Byte("full", (byte) (Quarry.Q.fullVersion ? 1 : 0))
+                    .Long("playTime", snapshotPlayTime)
+                    .Long("seed", Generator.G.getSeed())
+                    .String("name", currentGameName == null ? "LAN" : currentGameName);
+
+            CompoundTag meta = metaBuilder.Get();
+
+            Builder builder = new Builder("Save");
+            builder
+                    .Byte("version", Const.QSF_VERSION)
+                    .Int("build", Quarry.Q.versionNumber)
+                    .Byte("full", (byte) (Quarry.Q.fullVersion ? 1 : 0))
+                    .Long("playTime", snapshotPlayTime)
+                    .String("name", currentGameName == null ? "LAN" : currentGameName)
+                    .Short("layer", (short) layerIndex)
+                    .Byte("infinite", (byte) (infinite ? 1 : 0))
+                    .Long("seed", Generator.G.getSeed())
+                    .LongArray("rng", Generator.G.getState())
+                    .List("Map", TagType.Compound);
+
+            synchronized (layerLock) {
+                for (Layer l : layers) {
+                    l.save(builder);
+                }
+            }
+            builder.End().Compound("Resources");
+            synchronized (resourceLock) {
+                Array<Short> seen = new Array<>();
+                for (ItemType seenResource : getSeenResources()) {
+                    seen.add(seenResource.value);
+                }
+                short[] s = new short[seen.size];
+                int i = 0;
+                for (Short q : seen) s[i++] = q;
+                Util.NBTwriteInventory(builder, resources);
+                builder.ShortArray("Seen", s);
+            }
+            builder.End();
+            if (sciences.size() > 0) {
+                byte[] science = new byte[sciences.size()];
+                int i = 0;
+                for (ScienceType s : sciences) science[i++] = s.id;
+                builder.ByteArray("Sciences", science);
+            }
+            builder.Compound("camera")
+                    .Float("x", cam.position.x)
+                    .Float("y", cam.position.y)
+                    .Float("z", cam.position.z)
+                    .Float("zoom", cam.zoom)
+                    .End();
+            CompoundTag data = builder.Get();
+
+            ByteArrayOutputStream metaOut = new ByteArrayOutputStream();
+            ByteArrayOutputStream dataOut = new ByteArrayOutputStream();
+            NBT.write(metaOut, meta, CompressionType.Fast);
+            NBT.write(dataOut, data, CompressionType.Fast);
+            meta.free();
+            data.free();
+            return new LanSnapshot(metaOut.toByteArray(), dataOut.toByteArray());
+        } catch (Exception e) {
+            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+            return null;
+        }
+    }
+
+    public boolean placeStructureInternal(Layer currentLayer, Structure<?> structure, boolean playEffects, boolean deductResources) {
+        if (currentLayer.addStructure(structure)) {
+            if (deductResources && !GOD_MODE) {
+                Items costs = structure.getSchema().buildCosts;
+                for (Amount e : costs.entries) {
+                    removeResources(e.getItem(), e.getAmount(), true);
+                }
+            }
+
+            if (playEffects) {
+                synchronized (highlightLock) {
+                    if (tutorialHighlight.size > 0) {
+                        for (int i = 0; i < structure.getWidth(); i++) {
+                            for (int j = 0; j < structure.getHeight(); j++) {
+                                tutorialHighlight.remove((i + structure.x) * currentLayer.height + (j + structure.y));
+                            }
+                        }
+                    }
+                }
+
+                if (!structure.getSchema().has(Flags.NoDustEffect)) {
+                    for (int i = 0; i < structure.getWidth(); i++) {
+                        PooledEffect effect = dustPfxD.obtain();
+                        effect.reset();
+                        effect.setPosition(Const.TILE_SIZE * (structure.x + i), Const.TILE_SIZE * structure.y);
+                        effect.setDuration(10);
+                        layer.addParticleEffect(effect, true);
+
+                        effect = dustPfxU.obtain();
+                        effect.reset();
+                        effect.setPosition(Const.TILE_SIZE * (structure.x + i),
+                                Const.TILE_SIZE * (structure.y + structure.getHeight()));
+                        effect.setDuration(10);
+                        currentLayer.addParticleEffect(effect, true);
+                    }
+
+                    for (int i = 0; i < structure.getHeight(); i++) {
+                        PooledEffect effect = dustPfxL.obtain();
+                        effect.reset();
+                        effect.setPosition(Const.TILE_SIZE * structure.x, Const.TILE_SIZE * (structure.y + i));
+                        effect.setDuration(10);
+                        layer.addParticleEffect(effect, true);
+
+                        effect = dustPfxR.obtain();
+                        effect.reset();
+                        effect.setPosition(Const.TILE_SIZE * (structure.x + structure.getWidth()),
+                                Const.TILE_SIZE * (structure.y + i));
+                        effect.setDuration(10);
+                        currentLayer.addParticleEffect(effect, true);
+                    }
+                }
+
+                if (Quarry.Q.sound.isPlaySound()) {
+                    buildSfx.play(Quarry.Q.sound.getSoundVolume(), (float) (Math.random() * 0.4 + 0.6), 0);
+                }
+            }
+
+            if (lanSession != null && !lanApplyingCommand) {
+                NBT.Builder cmd = new NBT.Builder("Command")
+                        .String("kind", "build")
+                        .Int("layer", currentLayer.getIndex())
+                        .List("structures", TagType.Compound);
+                structure.save(cmd);
+                cmd.End();
+                emitLanCommand(cmd.Get());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public boolean removeStructureInternal(Structure<?> s, boolean playEffects, boolean refundResources) {
+        Layer targetLayer = s.layer != null ? s.layer : layer;
+        int targetLayerIndex = s.layer != null ? s.layer.getIndex() : layerIndex;
+        if (s instanceof CopperCable) {
+            targetLayer.removeCable((CopperCable) s);
+        } else {
+            targetLayer.removeStructure(s);
+        }
+
+        int removedHoppers = targetLayer.removeAttachedHoppers(s);
+
+        if (playEffects && Quarry.Q.sound.isPlaySound()) {
+            destroySfx.play(Quarry.Q.sound.getSoundVolume(), (float) (Math.random() * 0.2 + 0.8), 0);
+        }
+
+        if (refundResources) {
+            Items costs = s.getSchema().buildCosts;
+            for (Amount e : costs.entries) {
+                if (e.getAmount() > 1)
+                    addResources(e.getItem(), (int) Math.ceil(e.getAmount()
+                    * (hasScience(ScienceType.ConsiderateConstruction) ? Const.REFUND_CONSIDERATE_PERCENTAGE
+                                    : Const.REFUND_PERCENTAGE)),
+                            true);
+            }
+
+            costs = Hopper.classSchema.buildCosts;
+            for (Amount e : costs.entries) {
+                if (e.getAmount() > 1)
+                    addResources(e.getItem(), (int) Math.ceil(e.getAmount() * removedHoppers
+                            * (hasScience(ScienceType.ConsiderateConstruction) ? Const.REFUND_CONSIDERATE_PERCENTAGE
+                                    : Const.REFUND_PERCENTAGE)),
+                            true);
+            }
+        }
+
+        if (lanSession != null && !lanApplyingCommand) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "destroy")
+                    .Int("x", s.x)
+                    .Int("y", s.y)
+                    .Int("layer", targetLayerIndex);
+            emitLanCommand(cmd.Get());
+        }
+        return true;
     }
 
     @Override
@@ -3884,6 +4144,7 @@ public class Game extends GameScene {
 
     @Override
     public void dispose() {
+        closeLanSession();
         for (FrameBuffer fbo : chunkFBOs)
             if (fbo != null)
                 fbo.dispose();
@@ -4111,19 +4372,43 @@ public class Game extends GameScene {
 
     public void setPaused(boolean value) {
         gamePaused = value;
+        if (lanSession != null && !lanApplyingCommand) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "pause")
+                    .Byte("paused", (byte) (value ? 1 : 0));
+            emitLanCommand(cmd.Get());
+        }
     }
 
     public void play() {
         gamePaused = false;
         gameSpeed = 1;
+        if (lanSession != null && !lanApplyingCommand) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "pause")
+                    .Byte("paused", (byte) 0);
+            emitLanCommand(cmd.Get());
+        }
     }
 
     public void resetSpeed() {
         gameSpeed = 1;
+        if (lanSession != null && !lanApplyingCommand) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "speed")
+                    .Int("speed", gameSpeed);
+            emitLanCommand(cmd.Get());
+        }
     }
 
     public void increaseSpeed() {
         gameSpeed = Math.min(gameSpeed * 2, 100);
+        if (lanSession != null && !lanApplyingCommand) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "speed")
+                    .Int("speed", gameSpeed);
+            emitLanCommand(cmd.Get());
+        }
     }
 
     public int getItemCount() {

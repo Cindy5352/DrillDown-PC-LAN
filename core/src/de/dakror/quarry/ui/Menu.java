@@ -103,7 +103,7 @@ public class Menu {
         menuButton.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                boolean checked = ((ImageButton) actor).isChecked();
+        boolean checked = ((ImageButton) actor).isChecked();
 
                 float amount = menu.getWidth() * (checked ? 1 : -1);
 
@@ -421,8 +421,8 @@ public class Menu {
             }
         });
 
-        final ImageButton de = Util.id("lang");
-        de.setChecked(Quarry.Q.i18n.getLocale().getLanguage().equals("en"));
+        final TextButton de = Util.id("lang");
+        de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
         de.addListener(new ClickListener() {
             @Override
             public void clicked(InputEvent event, float x, float y) {
@@ -432,7 +432,8 @@ public class Menu {
                     public void call(Void data) {
                     }
                 });
-                Quarry.Q.prefs.putBoolean("german", !de.isChecked()).flush();
+                Quarry.Q.setLanguageCode(Quarry.Q.nextLanguageCode());
+                de.setChecked("zh".equals(Quarry.Q.getLanguageCode()));
             }
         });
 

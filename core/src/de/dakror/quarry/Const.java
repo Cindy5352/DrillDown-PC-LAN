@@ -56,12 +56,10 @@ public class Const {
 
     public static final float MAX_LOUDNESS = 1.25f;
 
-    public static final int MSG_FILE_PERMISSION = 13;
     public static final int MSG_DPI = 14;
     public static final int MSG_PADDING = 15;
     public static final int MSG_COPY = 17;
     public static final int MSG_PASTE = 18;
-    public static final int MSG_SELECT_ROOT = 19;
 
     public static final int MIN_AUTOSAVE_INTERVAL = 3 * 60 * 1000; // 3 minutes
 

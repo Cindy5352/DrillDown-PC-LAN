@@ -46,7 +46,7 @@
 
 		<table row="true" width="300" expandX="true">
 			<volumebutton id="sfx" height="50" style="sound" expand="true" />
-			<imagebutton id="lang" height="50" style="lang" expand="true" />
+			<textbutton id="lang" height="50" style="menu_item" text="中文" expand="true" />
 			<volumebutton id="music" height="50" style="music" expand="true" />
 		</table>
 		<image row="true" style="button" height="1" align="top" />

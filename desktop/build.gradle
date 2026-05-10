@@ -3,10 +3,10 @@ java.targetCompatibility = JavaVersion.VERSION_1_8
 
 sourceCompatibility = 1.8
 sourceSets.main.java.srcDirs = [ "src/" ]
-sourceSets.main.resources.srcDirs = [ project(":android").file("assets") ]
+sourceSets.main.resources.srcDirs = [ file("../assets") ]
 
 project.ext.mainClassName = "de.dakror.quarry.desktop.DesktopLauncher"
-project.ext.assetsDir = new File("../android/assets")
+project.ext.assetsDir = file("../assets")
 
 task run(dependsOn: classes, type: JavaExec) {
     main = project.mainClassName
@@ -51,8 +51,9 @@ compileJava {
 eclipse {
     project {
         name = appName + "-desktop"
-        linkedResource name: 'assets', type: '2', location: 'PARENT-1-PROJECT_LOC/android/assets'
+        linkedResource name: 'assets', type: '2', location: 'PARENT-1-PROJECT_LOC/assets'
     }
+
 }
 
 task afterEclipseImport(description: "Post processing after project generation", group: "IDE") {

@@ -35,6 +35,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ObjectMap;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import de.dakror.common.libgdx.PlatformInterface;
@@ -74,7 +75,7 @@ public class LoadingScreen extends Scene {
 
         assets.load("tex.atlas", TextureAtlas.class);
 
-        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("Roboto-Medium.ttf"));
+        FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("Chinese.ttf"));
         ObjectMap<String, Object> fontMap = new ObjectMap<String, Object>();
         fontMap.put("small-font", createFont(generator, 24));
         fontMap.put("default-font", createFont(generator, 32));
@@ -173,6 +174,7 @@ public class LoadingScreen extends Scene {
         FreeTypeFontParameter param = new FreeTypeFontParameter();
         param.magFilter = TextureFilter.Linear;
         param.minFilter = TextureFilter.Linear;
+        param.characters = buildFontCharacters();
         if (Quarry.Q.desktop) {
             param.size = (int) (dp * (float) Quarry.Q.pi.message(Const.MSG_DPI, null));
         } else {
@@ -182,6 +184,26 @@ public class LoadingScreen extends Scene {
         BitmapFont font = gen.generateFont(param);
         font.getData().markupEnabled = true;
         return font;
+    }
+
+    protected String buildFontCharacters() {
+        StringBuilder chars = new StringBuilder(FreeTypeFontGenerator.DEFAULT_CHARS);
+        Array<String> sources = new Array<>(new String[] {
+                Gdx.files.internal("i18n/TheQuarry_en.properties").readString("UTF-8"),
+                Gdx.files.internal("i18n/TheQuarry_de.properties").readString("UTF-8"),
+                Gdx.files.internal("i18n/TheQuarry_zh.properties").readString("UTF-8")
+        });
+
+        for (String source : sources) {
+            for (int i = 0; i < source.length(); i++) {
+                char c = source.charAt(i);
+                if (c > 127 && chars.indexOf(String.valueOf(c)) < 0) {
+                    chars.append(c);
+                }
+            }
+        }
+
+        return chars.toString();
     }
 
     @Override

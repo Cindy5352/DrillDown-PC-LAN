@@ -75,6 +75,7 @@ import com.badlogic.gdx.utils.viewport.Viewport;
 
 import de.dakror.common.BiCallback;
 import de.dakror.common.libgdx.PlatformInterface;
+import de.dakror.common.libgdx.io.NBT;
 import de.dakror.quarry.Const;
 import de.dakror.quarry.Quarry;
 import de.dakror.quarry.game.ConstantSupplyAmount;
@@ -632,6 +633,8 @@ public class GameUi implements Ui {
     }
 
     public void rotateActiveStructure() {
+        Structure<?> syncTarget = null;
+        boolean sync = false;
         if (tooltipCurrentStructure != null) {
             if (tooltipCurrentStructure instanceof IRotatable) {
                 if (!Game.G.activeStructureTrail.isEmpty() && Game.G.endB.x > -1) {
@@ -667,24 +670,56 @@ public class GameUi implements Ui {
                     Game.G.camControl.updateTrail();
                 } else {
                     ((IRotatable) tooltipCurrentStructure).rotate();
+                    syncTarget = tooltipCurrentStructure;
+                    sync = true;
                 }
             } else if (!tooltipCurrentStructure.getSchema().has(Flags.NotRotatable)) {
                 tooltipCurrentStructure.setUpDirection(tooltipCurrentStructure.getUpDirection().next());
+                syncTarget = tooltipCurrentStructure;
+                sync = true;
             }
             Game.G.camControl.updateActiveElementPlaceable();
         } else if (currentClickedStructure instanceof IRotatable) {
             ((IRotatable) currentClickedStructure).rotate();
+            syncTarget = currentClickedStructure;
+            sync = true;
+        }
+
+        if (sync && syncTarget != null && Game.G.lanSession != null && !Game.G.activeStructureTrail.isEmpty()) {
+            sync = false;
+        }
+        if (sync && syncTarget != null && Game.G.lanSession != null) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "rotate")
+                    .Int("x", syncTarget.x)
+                    .Int("y", syncTarget.y)
+                    .Int("layer", Game.G.layerIndex);
+            Game.G.emitLanCommand(cmd.Get());
         }
     }
 
     public void flipActiveStructure() {
+        Structure<?> syncTarget = null;
         if (tooltipCurrentStructure instanceof IFlippable) {
             ((IFlippable) tooltipCurrentStructure).flip();
             Game.G.camControl.updateActiveElementPlaceable();
             for (Structure<?> s : Game.G.activeStructureTrail.values())
                 ((IFlippable) s).flip();
+            if (Game.G.activeStructureTrail.isEmpty()) {
+                syncTarget = tooltipCurrentStructure;
+            }
         } else if (currentClickedStructure instanceof IFlippable) {
             ((IFlippable) currentClickedStructure).flip();
+            syncTarget = currentClickedStructure;
+        }
+
+        if (syncTarget != null && Game.G.lanSession != null) {
+            NBT.Builder cmd = new NBT.Builder("Command")
+                    .String("kind", "flip")
+                    .Int("x", syncTarget.x)
+                    .Int("y", syncTarget.y)
+                    .Int("layer", Game.G.layerIndex);
+            Game.G.emitLanCommand(cmd.Get());
         }
     }
 

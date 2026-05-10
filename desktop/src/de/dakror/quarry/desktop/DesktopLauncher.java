@@ -108,15 +108,15 @@ public class DesktopLauncher implements PlatformInterface {
 
         if (arg.length > 0 && arg[0].equals("textures")) {
             try {
-                TexturePacker.main(new String[] { "./Development/Textures/", "./android/assets/", "tex.atlas",
-                        "./android/assets/atlas-settings.json" });
+                TexturePacker.main(new String[] { "./Development/Textures/", "./assets/", "tex.atlas",
+                        "./assets/atlas-settings.json" });
             } catch (Exception e1) {
                 e1.printStackTrace();
             }
         }
 
         DesktopAudioDurationResolver.initialize();
-        Quarry game = new Quarry(this, true, versionCode, version, true, false, mode);
+        Quarry game = new Quarry(this, true, versionCode, version, true, mode);
         new LwjglApplication(game, config);
     }
 
@@ -199,9 +199,6 @@ public class DesktopLauncher implements PlatformInterface {
                     System.exit(0);
                 }
                 break;
-            }
-            case Const.MSG_FILE_PERMISSION: {
-                return true;
             }
         }
 
