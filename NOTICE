@@ -1,0 +1,11 @@
+Drill Down
+
+This repository is based on the open-source game Drill Down by Dakror:
+https://github.com/Dakror/DrillDown
+
+Chinese localization references material from:
+https://github.com/sinskl/DrillDown
+
+Modifications in this fork include PC-only cleanup and LAN multiplayer work.
+
+This project is distributed under the Apache License 2.0. See the `LICENSE` file for the full text.

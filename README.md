@@ -28,3 +28,6 @@ Use Gradle from the repository root:
 ## Notes
 - The codebase uses a host-authoritative LAN flow with snapshot join and command sync.
 - Android-specific entry points and mobile resource paths have been removed from the active PC setup.
+- This fork is based on [Dakror/DrillDown](https://github.com/Dakror/DrillDown).
+- Chinese localization work references [sinskl/DrillDown](https://github.com/sinskl/DrillDown).
+- The project is distributed under the Apache License 2.0; see `LICENSE` and `NOTICE`.
