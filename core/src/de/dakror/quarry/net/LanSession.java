@@ -191,8 +191,13 @@ public final class LanSession {
                     int len = in.readInt();
                     byte[] payload = new byte[len];
                     in.readFully(payload);
+                    System.out.println("lan client recv command from=" + from + " bytes=" + len);
                     applyCommand(payload, from);
                 }
+            }
+        } catch (SocketException e) {
+            if (running) {
+                // treat disconnects as normal shutdown
             }
         } catch (IOException e) {
             if (running) {
@@ -239,6 +244,9 @@ public final class LanSession {
     private void applyCommand(byte[] payload, long fromClientId) {
         try {
             CompoundTag tag = NBT.read(new ByteArrayInputStream(payload), CompressionType.Small);
+            if (!tag.has("client")) {
+                tag.Long("client", fromClientId);
+            }
             Gdx.app.postRunnable(new Runnable() {
                 @Override
                 public void run() {
@@ -301,6 +309,7 @@ public final class LanSession {
                             int len = in.readInt();
                             byte[] payload = new byte[len];
                             in.readFully(payload);
+                            System.out.println("lan host recv command from=" + from + " bytes=" + len);
                             applyCommand(payload, from);
                             if (!host) {
                                 // no-op
@@ -308,10 +317,11 @@ public final class LanSession {
                         }
                     }
                 } catch (IOException e) {
-                    if (running) {
+                    if (running && !socket.isClosed()) {
                         Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
                     }
                 } finally {
+                    game.removeRemoteCursor(clientId);
                     close();
                 }
             }, "lan-host-client");

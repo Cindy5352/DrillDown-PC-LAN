@@ -61,6 +61,7 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Actor;
@@ -185,6 +186,13 @@ public class Game extends GameScene {
         public int layer;
         public int tileX;
         public int tileY;
+        public int screenX;
+        public int screenY;
+        public float normX;
+        public float normY;
+        public float renderX;
+        public float renderY;
+        public boolean renderInitialized;
         public long lastSeenMs;
         public final float r;
         public final float g;
@@ -198,16 +206,32 @@ public class Game extends GameScene {
             b = 0.35f + ((hash >> 16) & 0x7f) / 255f * 0.65f;
         }
 
-        void update(int layer, int tileX, int tileY) {
+        void update(int layer, int tileX, int tileY, int screenX, int screenY, float normX, float normY) {
             this.layer = layer;
             this.tileX = tileX;
             this.tileY = tileY;
+            this.screenX = screenX;
+            this.screenY = screenY;
+            this.normX = normX;
+            this.normY = normY;
             this.lastSeenMs = System.currentTimeMillis();
         }
 
-        boolean isAlive(long nowMs, long ttlMs) {
-            return nowMs - lastSeenMs <= ttlMs;
+        void advance(float delta, int width, int height) {
+            float targetX = normX >= 0f ? normX * width : screenX;
+            float targetY = normY >= 0f ? normY * height : screenY;
+            if (!renderInitialized) {
+                renderX = targetX;
+                renderY = targetY;
+                renderInitialized = true;
+                return;
+            }
+
+            float t = MathUtils.clamp(delta * 18f, 0f, 1f);
+            renderX += (targetX - renderX) * t;
+            renderY += (targetY - renderY) * t;
         }
+
     }
 
     public class QuarryCameraControl extends EditorCameraControl {
@@ -1455,6 +1479,7 @@ public class Game extends GameScene {
     private boolean lanHostPending;
     private int lanHostPort = LanSession.DEFAULT_PORT;
     Batch batch;
+    SpriteBatch remoteCursorBatch;
     BatchDelegate delegate;
     OrthographicCamera cam;
     OrthographicCamera fboCam;
@@ -1480,9 +1505,13 @@ public class Game extends GameScene {
     private int localCursorLayer = Integer.MIN_VALUE;
     private int localCursorTileX = Integer.MIN_VALUE;
     private int localCursorTileY = Integer.MIN_VALUE;
+    private int localCursorScreenX = Integer.MIN_VALUE;
+    private int localCursorScreenY = Integer.MIN_VALUE;
     private boolean localCursorVisible;
     private final Object remoteCursorLock = new Object();
     private final HashMap<Long, RemoteCursorState> remoteCursors = new HashMap<>();
+    private final Matrix4 screenProjection = new Matrix4();
+    private Texture remoteCursorTexture;
     public final PowerGrid powerGrid = new PowerGrid();
     AStar<Integer> tilePathfinding;
     Network<Integer> tileNetwork = new AStar.Network<Integer>() {
@@ -1681,6 +1710,8 @@ public class Game extends GameScene {
             throw new IllegalArgumentException("Error compiling shader: " + colorShader.getLog());
 
         batch = new SpriteBatch(8191, colorShader);
+        remoteCursorBatch = new SpriteBatch(1);
+        remoteCursorTexture = createRemoteCursorTexture();
 
         cam = new OrthographicCamera();
         shaper = new ShapeRenderer();
@@ -1935,6 +1966,8 @@ public class Game extends GameScene {
         localCursorLayer = Integer.MIN_VALUE;
         localCursorTileX = Integer.MIN_VALUE;
         localCursorTileY = Integer.MIN_VALUE;
+        localCursorScreenX = Integer.MIN_VALUE;
+        localCursorScreenY = Integer.MIN_VALUE;
         localCursorVisible = false;
     }
 
@@ -1985,8 +2018,12 @@ public class Game extends GameScene {
             return;
         }
 
+        System.out.println("recv cursor " + clientId + " " + command.Int("layer", layerIndex) + " "
+                + command.Int("x", -1) + " " + command.Int("y", -1) + " "
+                + command.Int("sx", -1) + " " + command.Int("sy", -1));
         updateRemoteCursor(clientId, command.Int("layer", layerIndex), command.Int("x", -1),
-                command.Int("y", -1));
+                command.Int("y", -1), command.Int("sx", -1), command.Int("sy", -1),
+                command.Float("nx", -1f), command.Float("ny", -1f));
     }
 
     protected void applyLanBuildBatch(CompoundTag command) {
@@ -3157,8 +3194,8 @@ public class Game extends GameScene {
         }
         shaper.end();*/
 
-        drawRemoteCursors();
         ui.draw();
+        drawRemoteCursors();
 
         if (deltaLayer != 0) {
             synchronized (layerLock) {
@@ -3196,15 +3233,20 @@ public class Game extends GameScene {
             return;
         }
 
-        long now = System.currentTimeMillis();
         Collection<RemoteCursorState> cursors = getRemoteCursorSnapshot();
         if (cursors.isEmpty()) {
             return;
         }
 
+        if (remoteCursorTexture == null) {
+            return;
+        }
+
         Gdx.gl.glEnable(GL20.GL_BLEND);
-        shaper.setProjectionMatrix(cam.combined);
-        shaper.begin(ShapeType.Filled);
+        screenProjection.setToOrtho2D(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        remoteCursorBatch.setProjectionMatrix(screenProjection);
+        remoteCursorBatch.begin();
+        float delta = Gdx.graphics.getDeltaTime();
         for (RemoteCursorState cursor : cursors) {
             if (cursor.clientId == lanSession.getLocalClientId()) {
                 continue;
@@ -3212,21 +3254,77 @@ public class Game extends GameScene {
             if (cursor.layer != layerIndex) {
                 continue;
             }
-            if (cursor.tileX < 0 || cursor.tileY < 0 || cursor.tileX >= layer.width || cursor.tileY >= layer.height) {
+            if (cursor.screenX < 0 || cursor.screenY < 0) {
                 continue;
             }
 
-            float alpha = MathUtils.clamp(1f - ((now - cursor.lastSeenMs) / 700f), 0f, 1f);
-            if (alpha <= 0f) {
-                continue;
-            }
-
-            shaper.setColor(cursor.r, cursor.g, cursor.b, 0.35f * alpha);
-            shaper.rect(cursor.tileX * Const.TILE_SIZE + 6, cursor.tileY * Const.TILE_SIZE + 6,
-                    Const.TILE_SIZE - 12, Const.TILE_SIZE - 12);
+            cursor.advance(delta, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+            float size = 24f;
+            System.out.println("draw cursor " + cursor.clientId + " layer=" + cursor.layer + " x=" + cursor.renderX + " y=" + cursor.renderY);
+            remoteCursorBatch.setColor(cursor.r, cursor.g, cursor.b, 0.95f);
+            remoteCursorBatch.draw(remoteCursorTexture, cursor.renderX, Gdx.graphics.getHeight() - cursor.renderY - size,
+                    size, size);
         }
-        shaper.end();
+        remoteCursorBatch.setColor(1f, 1f, 1f, 1f);
+        remoteCursorBatch.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    private Texture createRemoteCursorTexture() {
+        Pixmap pixmap = new Pixmap(24, 24, Pixmap.Format.RGBA8888);
+        try {
+            pixmap.setBlending(Pixmap.Blending.None);
+            pixmap.setColor(0f, 0f, 0f, 0f);
+            pixmap.fill();
+
+            fillTriangle(pixmap, 3, 2, 3, 21, 18, 11, 0f, 0f, 0f, 0.95f);
+            fillTriangle(pixmap, 5, 4, 5, 18, 15, 11, 1f, 1f, 1f, 1f);
+            pixmap.setColor(0f, 0f, 0f, 0.95f);
+            pixmap.fillRectangle(4, 17, 5, 5);
+            pixmap.setColor(1f, 1f, 1f, 1f);
+            pixmap.fillRectangle(5, 18, 3, 3);
+
+            Texture texture = new Texture(pixmap);
+            texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            return texture;
+        } finally {
+            pixmap.dispose();
+        }
+    }
+
+    private void fillTriangle(Pixmap pixmap, int ax, int ay, int bx, int by, int cx, int cy, float r, float g, float b, float a) {
+        pixmap.setColor(r, g, b, a);
+        int minX = Math.min(ax, Math.min(bx, cx));
+        int maxX = Math.max(ax, Math.max(bx, cx));
+        int minY = Math.min(ay, Math.min(by, cy));
+        int maxY = Math.max(ay, Math.max(by, cy));
+        for (int y = minY; y <= maxY; y++) {
+            for (int x = minX; x <= maxX; x++) {
+                if (pointInTriangle(x + 0.5f, y + 0.5f, ax, ay, bx, by, cx, cy)) {
+                    pixmap.drawPixel(x, y);
+                }
+            }
+        }
+    }
+
+    private boolean pointInTriangle(float px, float py, float ax, float ay, float bx, float by, float cx, float cy) {
+        float v0x = cx - ax;
+        float v0y = cy - ay;
+        float v1x = bx - ax;
+        float v1y = by - ay;
+        float v2x = px - ax;
+        float v2y = py - ay;
+
+        float dot00 = v0x * v0x + v0y * v0y;
+        float dot01 = v0x * v1x + v0y * v1y;
+        float dot02 = v0x * v2x + v0y * v2y;
+        float dot11 = v1x * v1x + v1y * v1y;
+        float dot12 = v1x * v2x + v1y * v2y;
+
+        float invDenom = 1f / (dot00 * dot11 - dot01 * dot01);
+        float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+        float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+        return u >= 0f && v >= 0f && u + v <= 1f;
     }
 
     public void drawStructureAssists(Structure<?> structure, Recipe activeRecipe) {
@@ -4246,6 +4344,8 @@ public class Game extends GameScene {
                 fbo.dispose();
 
         batch.dispose();
+        remoteCursorBatch.dispose();
+        remoteCursorTexture.dispose();
         synchronized (layerLock) {
             if (layers.size > 0) {
                 for (Layer l : layers)
@@ -4590,7 +4690,8 @@ public class Game extends GameScene {
         int tileY = visible ? hoverTileY : -1;
 
         boolean changed = visible != localCursorVisible || layerIndex != localCursorLayer
-                || tileX != localCursorTileX || tileY != localCursorTileY;
+                || tileX != localCursorTileX || tileY != localCursorTileY
+                || screenX != localCursorScreenX || screenY != localCursorScreenY;
         if (!changed && localCursorSyncAcc < 0.1f) {
             return;
         }
@@ -4600,38 +4701,46 @@ public class Game extends GameScene {
         localCursorLayer = layerIndex;
         localCursorTileX = tileX;
         localCursorTileY = tileY;
+        localCursorScreenX = screenX;
+        localCursorScreenY = screenY;
 
         NBT.Builder cmd = new NBT.Builder("Command")
                 .String("kind", "cursor")
                 .Int("layer", layerIndex)
                 .Int("x", tileX)
-                .Int("y", tileY);
+                .Int("y", tileY)
+                .Int("sx", screenX)
+                .Int("sy", screenY)
+                .Float("nx", screenX / (float) Math.max(1, Gdx.graphics.getWidth()))
+                .Float("ny", screenY / (float) Math.max(1, Gdx.graphics.getHeight()));
+        System.out.println("send cursor " + layerIndex + " " + tileX + " " + tileY + " " + screenX + " " + screenY);
         emitLanCommand(cmd.Get());
     }
 
-    private void updateRemoteCursor(long clientId, int cursorLayer, int tileX, int tileY) {
+    private void updateRemoteCursor(long clientId, int cursorLayer, int tileX, int tileY, int screenX, int screenY,
+            float normX, float normY) {
         synchronized (remoteCursorLock) {
             RemoteCursorState cursor = remoteCursors.get(clientId);
             if (cursor == null) {
                 cursor = new RemoteCursorState(clientId);
                 remoteCursors.put(clientId, cursor);
             }
-            cursor.update(cursorLayer, tileX, tileY);
+            cursor.update(cursorLayer, tileX, tileY, screenX, screenY, normX, normY);
+        }
+    }
+
+    public void removeRemoteCursor(long clientId) {
+        synchronized (remoteCursorLock) {
+            remoteCursors.remove(clientId);
         }
     }
 
     public Collection<RemoteCursorState> getRemoteCursorSnapshot() {
-        long now = System.currentTimeMillis();
         ArrayList<RemoteCursorState> result = new ArrayList<>();
         synchronized (remoteCursorLock) {
             Iterator<Map.Entry<Long, RemoteCursorState>> it = remoteCursors.entrySet().iterator();
             while (it.hasNext()) {
-                RemoteCursorState cursor = it.next().getValue();
-                if (!cursor.isAlive(now, 700)) {
-                    it.remove();
-                    continue;
-                }
-                result.add(cursor);
+                result.add(it.next().getValue());
             }
         }
         return result;

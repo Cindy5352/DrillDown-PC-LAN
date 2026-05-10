@@ -7,6 +7,10 @@ sourceSets.main.resources.srcDirs = [ file("../assets") ]
 
 project.ext.mainClassName = "de.dakror.quarry.desktop.DesktopLauncher"
 project.ext.assetsDir = file("../assets")
+def portableBuildDir = file("$buildDir/portable")
+def portableRuntimeDir = file("$portableBuildDir/jre")
+def portableOutDir = file("$rootDir/distribute/output/portable")
+def portableJarName = "DrillDown.jar"
 
 task run(dependsOn: classes, type: JavaExec) {
     main = project.mainClassName
@@ -44,6 +48,72 @@ task dist(type: Jar) {
 }
 
 dist.dependsOn classes
+
+task portableRuntime(type: Exec) {
+    dependsOn dist
+    doFirst {
+        delete portableRuntimeDir
+        portableRuntimeDir.parentFile.mkdirs()
+    }
+
+    def jlinkExe = new File(System.getProperty("java.home"), "bin/jlink.exe")
+    commandLine jlinkExe.absolutePath,
+            "--add-modules", "java.se,jdk.unsupported,jdk.crypto.ec",
+            "--strip-debug",
+            "--no-header-files",
+            "--no-man-pages",
+            "--compress=2",
+            "--output", portableRuntimeDir.absolutePath
+}
+
+task portableDist {
+    dependsOn portableRuntime
+    dependsOn dist
+    doLast {
+        delete portableOutDir
+        portableOutDir.mkdirs()
+
+        copy {
+            from dist.archiveFile.get().asFile
+            into portableOutDir
+            rename { portableJarName }
+        }
+
+        copy {
+            from portableRuntimeDir
+            into new File(portableOutDir, "jre")
+        }
+
+        def runBat = new File(portableOutDir, "run.bat")
+        runBat.text = """@echo off
+setlocal
+cd /d "%~dp0"
+set "JAVA_EXE=%~dp0jre\\bin\\java.exe"
+if not exist "%JAVA_EXE%" set "JAVA_EXE=java"
+"%JAVA_EXE%" -Dfile.encoding=UTF-8 -jar "%~dp0${portableJarName}"
+endlocal
+"""
+
+        new File(portableOutDir, "run-debug.bat").text = """@echo off
+setlocal
+cd /d "%~dp0"
+set "JAVA_EXE=%~dp0jre\\bin\\java.exe"
+if not exist "%JAVA_EXE%" set "JAVA_EXE=java"
+"%JAVA_EXE%" -Dfile.encoding=UTF-8 -jar "%~dp0${portableJarName}" debug
+endlocal
+"""
+    }
+}
+
+task portableZip(type: Zip) {
+    dependsOn portableDist
+    from portableOutDir
+    archiveFileName = "DrillDown-portable.zip"
+    destinationDirectory = file("$rootDir/distribute/output")
+    doFirst {
+        delete archiveFile.get().asFile
+    }
+}
 
 compileJava {
     options.release = 8

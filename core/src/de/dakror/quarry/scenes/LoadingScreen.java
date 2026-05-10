@@ -24,18 +24,20 @@ import com.badlogic.gdx.assets.loaders.resolvers.InternalFileHandleResolver;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Texture.TextureFilter;
+import com.badlogic.gdx.graphics.Pixmap.Format;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFontParameter;
+import com.badlogic.gdx.graphics.g2d.PixmapPacker;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.utils.Align;
-import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
 import de.dakror.common.libgdx.PlatformInterface;
@@ -175,11 +177,9 @@ public class LoadingScreen extends Scene {
         param.magFilter = TextureFilter.Linear;
         param.minFilter = TextureFilter.Linear;
         param.characters = buildFontCharacters();
-        if (Quarry.Q.desktop) {
-            param.size = (int) (dp * (float) Quarry.Q.pi.message(Const.MSG_DPI, null));
-        } else {
-            param.size = (int) (dp * (float) Quarry.Q.pi.message(Const.MSG_DPI, null));
-        }
+        param.packer = new PixmapPacker(2048, 2048, Format.RGBA8888, 2, false);
+        float dpiScale = (float) Quarry.Q.pi.message(Const.MSG_DPI, null);
+        param.size = Math.max(1, (int) (dp * dpiScale));
 
         BitmapFont font = gen.generateFont(param);
         font.getData().markupEnabled = true;
@@ -188,22 +188,49 @@ public class LoadingScreen extends Scene {
 
     protected String buildFontCharacters() {
         StringBuilder chars = new StringBuilder(FreeTypeFontGenerator.DEFAULT_CHARS);
-        Array<String> sources = new Array<>(new String[] {
-                Gdx.files.internal("i18n/TheQuarry_en.properties").readString("UTF-8"),
-                Gdx.files.internal("i18n/TheQuarry_de.properties").readString("UTF-8"),
-                Gdx.files.internal("i18n/TheQuarry_zh.properties").readString("UTF-8")
-        });
+        String[] files = new String[] {
+                "i18n/TheQuarry_en.properties",
+                "i18n/TheQuarry_de.properties",
+                "i18n/TheQuarry_zh.properties",
+                "lml/alert.xml",
+                "lml/back-button.xml",
+                "lml/buttons.xml",
+                "lml/confirm.xml",
+                "lml/copy.xml",
+                "lml/endofgame.xml",
+                "lml/layer-selection.xml",
+                "lml/main-menu.xml",
+                "lml/menu.xml",
+                "lml/prompt.xml",
+                "lml/saves.xml",
+                "lml/seed-prompt.xml",
+                "lml/structure-filter.xml",
+                "lml/tileui.xml",
+                "lml/toast.xml",
+                "lml/tooltip.xml",
+                "lml/upgrade.xml",
+                "lml/x-button.xml",
+                "skin.json",
+                "atlas-settings.json"
+        };
 
-        for (String source : sources) {
-            for (int i = 0; i < source.length(); i++) {
-                char c = source.charAt(i);
-                if (c > 127 && chars.indexOf(String.valueOf(c)) < 0) {
-                    chars.append(c);
-                }
-            }
+        for (String file : files) {
+            appendCharacters(chars, Gdx.files.internal(file).readString("UTF-8"));
         }
 
+        appendCharacters(chars, "中文");
+        System.out.println("Generated font charset length: " + chars.length());
+
         return chars.toString();
+    }
+
+    protected void appendCharacters(StringBuilder chars, String source) {
+        for (int i = 0; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (c > 127 && chars.indexOf(String.valueOf(c)) < 0) {
+                chars.append(c);
+            }
+        }
     }
 
     @Override
