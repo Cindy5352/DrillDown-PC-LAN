@@ -167,7 +167,7 @@ public class ConveyorBridge extends Conveyor implements IItemZModifier, IFlippab
     @Override
     public void flip() {
         dir2Prev = !dir2Prev;
-        setDirty();
+        refreshConnectedConveyors();
     }
 
     @Override

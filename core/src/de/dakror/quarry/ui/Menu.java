@@ -407,10 +407,7 @@ public class Menu {
                                         Gdx.app.postRunnable(new Runnable() {
                                             @Override
                                             public void run() {
-                                                menuButton.setChecked(false);
-                                                Game.G.reset();
-                                                Quarry.Q.addScene(MainMenu.M);
-                                                Quarry.Q.dropScene(Game.G);
+                                                Game.G.returnToMainMenu();
                                             }
                                         });
                                     }
@@ -419,10 +416,7 @@ public class Menu {
                                 Gdx.app.postRunnable(new Runnable() {
                                     @Override
                                     public void run() {
-                                        menuButton.setChecked(false);
-                                        Game.G.reset();
-                                        Quarry.Q.addScene(MainMenu.M);
-                                        Quarry.Q.dropScene(Game.G);
+                                        Game.G.returnToMainMenu();
                                     }
                                 });
                             }

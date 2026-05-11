@@ -70,8 +70,7 @@ public class EndOfGame {
                     @Override
                     public void call(Void e) {
                         // TODO ugly, polish, also remove toast from game ui
-                        Quarry.Q.addScene(MainMenu.M);
-                        Quarry.Q.dropScene(Game.G);
+                        Game.G.returnToMainMenu();
                     }
                 });
             }

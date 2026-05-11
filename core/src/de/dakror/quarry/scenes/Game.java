@@ -2075,6 +2075,20 @@ public class Game extends GameScene {
         lanStorageSyncAcc = 0f;
     }
 
+    public void returnToMainMenu() {
+        closeLanSession();
+        reset();
+        if (ui != null && ui.menu != null && ui.menu.menuButton != null) {
+            ui.menu.menuButton.setChecked(false);
+        }
+        if (!Quarry.Q.hasScene(MainMenu.M)) {
+            Quarry.Q.addScene(MainMenu.M);
+        }
+        if (Quarry.Q.hasScene(this)) {
+            Quarry.Q.dropScene(this);
+        }
+    }
+
     public void emitLanCommand(CompoundTag command) {
         if (lanSession == null || lanApplyingCommand) {
             return;

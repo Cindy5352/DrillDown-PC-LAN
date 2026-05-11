@@ -2,6 +2,7 @@ package de.dakror.quarry.net;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -44,6 +45,7 @@ public final class LanSession {
     private Thread readThread;
     private Callback<Object> loadCallback;
     private volatile boolean cursorCommandDebugLogged;
+    private volatile boolean disconnectNotified;
 
     private LanSession(Game game, boolean host) {
         this.game = game;
@@ -102,7 +104,7 @@ public final class LanSession {
         try {
             writeCommand(socket, command);
         } catch (IOException e) {
-            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+            notifyHostDisconnected();
         }
     }
 
@@ -206,13 +208,9 @@ public final class LanSession {
                     applyCommand(payload, from);
                 }
             }
-        } catch (SocketException e) {
-            if (running) {
-                // treat disconnects as normal shutdown
-            }
         } catch (IOException e) {
             if (running) {
-                Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+                notifyHostDisconnected();
             }
         }
     }
@@ -293,6 +291,27 @@ public final class LanSession {
         }
     }
 
+    private void notifyHostDisconnected() {
+        if (host || !running || disconnectNotified) {
+            return;
+        }
+
+        disconnectNotified = true;
+        close();
+
+        Runnable action = new Runnable() {
+            @Override
+            public void run() {
+                game.returnToMainMenu();
+            }
+        };
+        if (Gdx.app != null) {
+            Gdx.app.postRunnable(action);
+        } else {
+            action.run();
+        }
+    }
+
     private void writeCommand(Socket socket, CompoundTag command) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         NBT.write(baos, command, CompressionType.Small);
@@ -347,6 +366,8 @@ public final class LanSession {
                             }
                         }
                     }
+                } catch (SocketException | EOFException e) {
+                    // Normal client disconnect.
                 } catch (IOException e) {
                     if (running && !socket.isClosed()) {
                         Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);

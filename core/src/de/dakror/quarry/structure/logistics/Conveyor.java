@@ -355,6 +355,25 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
         //notification = false;
     }
 
+    protected void refreshConnectedConveyors() {
+        updateStructures();
+
+        Layer l = layer == null ? Game.G.layer : layer;
+        if (l == null) {
+            return;
+        }
+
+        for (Direction d : Direction.values) {
+            Structure<?> s = l.getStructure(x + d.dx, y + d.dy);
+            if (s instanceof Conveyor && s != this) {
+                ((Conveyor) s).updateStructures();
+                l.dirtyBounds.add(s, 0);
+            }
+        }
+
+        l.dirtyBounds.add(this, 0);
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
@@ -546,7 +565,7 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
     @Override
     public void onPlacement(boolean fromLoading) {
         if (!fromLoading) {
-            updateStructures();
+            refreshConnectedConveyors();
         }
     }
 
@@ -658,8 +677,11 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
         Direction previous = dir;
         dir = direction;
 
-        if (layer == null) updateStructures();
-        else setDirty();
+        if (layer == null) {
+            updateStructures();
+        } else {
+            refreshConnectedConveyors();
+        }
 
         if (previous != direction && Game.G != null) {
             Game.G.emitLanSetRotation(this, direction);
