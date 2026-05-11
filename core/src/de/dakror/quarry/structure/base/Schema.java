@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.Array;
@@ -131,12 +130,7 @@ public class Schema {
             try {
                 icon = Quarry.Q.skin.getDrawable("structure_" + tex);
             } catch (Exception e) {
-                TextureRegion fallback = Quarry.Q.atlas.findRegion("structure_" + tex);
-                if (fallback != null) {
-                    icon = new TextureRegionDrawable(fallback);
-                } else {
-                    icon = Quarry.Q.skin.getDrawable("structure_redstone");
-                }
+                icon = Quarry.Q.skin.getDrawable("structure_redstone");
             }
         }
         this.icon = icon;
