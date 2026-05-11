@@ -4885,7 +4885,8 @@ public class Game extends GameScene {
     }
 
     private void updateLocalPointerState(int screenX, int screenY) {
-        viewport.unproject(tmp.set(screenX, screenY));
+        // Gdx.input uses a top-left origin, while unproject expects bottom-left screen coordinates.
+        viewport.unproject(tmp.set(screenX, Gdx.graphics.getHeight() - screenY));
         hoverTileX = (int) (tmp.x / Const.TILE_SIZE);
         hoverTileY = (int) (tmp.y / Const.TILE_SIZE);
     }
