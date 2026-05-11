@@ -241,6 +241,35 @@ public class Game extends GameScene {
 
     }
 
+    public static final class RemotePlacementPreviewState {
+        public final long clientId;
+        public final int layer;
+        public final boolean visible;
+        public final boolean placeable;
+        public final boolean canAfford;
+        public final int endAx;
+        public final int endAy;
+        public final int endBx;
+        public final int endBy;
+        public final int activeEnd;
+        public final List<Structure<?>> structures;
+
+        RemotePlacementPreviewState(long clientId, int layer, boolean visible, boolean placeable, boolean canAfford,
+                int endAx, int endAy, int endBx, int endBy, int activeEnd, List<Structure<?>> structures) {
+            this.clientId = clientId;
+            this.layer = layer;
+            this.visible = visible;
+            this.placeable = placeable;
+            this.canAfford = canAfford;
+            this.endAx = endAx;
+            this.endAy = endAy;
+            this.endBx = endBx;
+            this.endBy = endBy;
+            this.activeEnd = activeEnd;
+            this.structures = structures;
+        }
+    }
+
     public class QuarryCameraControl extends EditorCameraControl {
         @Override
         public boolean touchUp(int screenX, int screenY, int pointer, int button) {
@@ -1471,6 +1500,7 @@ public class Game extends GameScene {
 
     private static final Pattern fileRegex = Pattern.compile("[^0-9a-zA-Z-_]");
 
+    private static final int[] PREVIEW_COPY_REGION = new int[] { 0, 0, 0, 0 };
     private static final HashMap<String, Texture> saveThumbnailCache = new HashMap<>();
 
     private static final Object layerLock = new Object();
@@ -1519,6 +1549,8 @@ public class Game extends GameScene {
     private boolean localCursorVisible;
     private final Object remoteCursorLock = new Object();
     private final HashMap<Long, RemoteCursorState> remoteCursors = new HashMap<>();
+    private final Object remotePlacementPreviewLock = new Object();
+    private final HashMap<Long, RemotePlacementPreviewState> remotePlacementPreviews = new HashMap<>();
     private final Matrix4 screenProjection = new Matrix4();
     private TextureRegion remoteCursorTexture;
     private boolean remoteCursorDebugUpdateLogged;
@@ -1526,6 +1558,7 @@ public class Game extends GameScene {
     private boolean remoteCursorDebugFilterLogged;
     private boolean remoteCursorDebugOverlayLogged;
     private boolean localCursorDebugSendLogged;
+    private long localPlacementPreviewSignature = Long.MIN_VALUE;
     public final PowerGrid powerGrid = new PowerGrid();
     AStar<Integer> tilePathfinding;
     Network<Integer> tileNetwork = new AStar.Network<Integer>() {
@@ -1976,6 +2009,9 @@ public class Game extends GameScene {
         synchronized (remoteCursorLock) {
             remoteCursors.clear();
         }
+        synchronized (remotePlacementPreviewLock) {
+            remotePlacementPreviews.clear();
+        }
         localCursorSyncAcc = 0f;
         localCursorLayer = Integer.MIN_VALUE;
         localCursorTileX = Integer.MIN_VALUE;
@@ -1983,6 +2019,7 @@ public class Game extends GameScene {
         localCursorScreenX = Integer.MIN_VALUE;
         localCursorScreenY = Integer.MIN_VALUE;
         localCursorVisible = false;
+        localPlacementPreviewSignature = Long.MIN_VALUE;
     }
 
     public void emitLanCommand(CompoundTag command) {
@@ -2020,6 +2057,8 @@ public class Game extends GameScene {
                 applyLanFlip(command);
             } else if ("cursor".equals(kind)) {
                 applyLanCursor(command);
+            } else if ("build_preview".equals(kind)) {
+                applyLanPlacementPreview(command);
             }
         } finally {
             lanApplyingCommand = old;
@@ -2035,6 +2074,53 @@ public class Game extends GameScene {
         updateRemoteCursor(clientId, command.Int("layer", layerIndex), command.Int("x", -1),
                 command.Int("y", -1), command.Int("sx", -1), command.Int("sy", -1), command.Float("wx", -1f),
                 command.Float("wy", -1f), command.Float("nx", -1f), command.Float("ny", -1f));
+    }
+
+    public void applyLanPlacementPreview(CompoundTag command) {
+        long clientId = command.Long("client", -1);
+        if (clientId < 0) {
+            return;
+        }
+
+        boolean visible = command.Byte("visible", (byte) 0) == 1;
+        if (!visible) {
+            removeRemotePlacementPreview(clientId);
+            return;
+        }
+
+        int previewLayerIndex = command.Int("layer", layerIndex);
+        boolean placeable = command.Byte("placeable", (byte) 0) == 1;
+        boolean canAfford = command.Byte("canAfford", (byte) 0) == 1;
+        int endAx = command.Int("endAx", -1);
+        int endAy = command.Int("endAy", -1);
+        int endBx = command.Int("endBx", -1);
+        int endBy = command.Int("endBy", -1);
+        int activeEnd = command.Int("activeEnd", 0);
+
+        ArrayList<Structure<?>> structures = new ArrayList<>();
+        try {
+            ListTag list = command.List("structures");
+            Layer previewLayer = getLayer(previewLayerIndex);
+            for (Tag t : list.data) {
+                Structure<?> s = Structure.load((CompoundTag) t);
+                if (s != null) {
+                    if (previewLayer != null) {
+                        s.layer = previewLayer;
+                    }
+                    structures.add(s);
+                }
+            }
+        } catch (Exception e) {
+            Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
+        }
+
+        if (structures.isEmpty() && endAx < 0 && endBx < 0) {
+            removeRemotePlacementPreview(clientId);
+            return;
+        }
+
+        updateRemotePlacementPreview(clientId, previewLayerIndex, true, placeable, canAfford, endAx, endAy, endBx, endBy,
+                activeEnd, structures);
     }
 
     protected void applyLanBuildBatch(CompoundTag command) {
@@ -2425,6 +2511,7 @@ public class Game extends GameScene {
 
         ui.update(deltaTime);
         syncLocalCursor(deltaTime);
+        syncLocalPlacementPreview();
 
         spatializer.setCenter(cam.position.x, cam.position.y, cam.zoom / 0.5f);
         spatializedPlayer.update((float) deltaTime);
@@ -2662,6 +2749,8 @@ public class Game extends GameScene {
 
         batch.begin();
         Gdx.gl.glEnable(GL20.GL_BLEND);
+
+        drawRemotePlacementPreviews();
 
         if (activeStructure != null && (activeStructure.x > -1 || endA.x > -1)) {
             if (endB.x > -1) {
@@ -3287,6 +3376,162 @@ public class Game extends GameScene {
         remoteCursorBatch.setColor(1f, 1f, 1f, 1f);
         remoteCursorBatch.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
+    }
+
+    private void drawRemotePlacementPreviews() {
+        if (lanSession == null || layer == null) {
+            return;
+        }
+
+        Collection<RemotePlacementPreviewState> previews = getRemotePlacementPreviewSnapshot();
+        if (previews.isEmpty()) {
+            return;
+        }
+
+        boolean drewPreview = false;
+        boolean drewLines = false;
+        long localClientId = lanSession.getLocalClientId();
+
+        for (RemotePlacementPreviewState preview : previews) {
+            if (preview.clientId == localClientId) {
+                continue;
+            }
+            if (!preview.visible || preview.layer != layerIndex) {
+                continue;
+            }
+
+            drewPreview = true;
+            boolean placeable = preview.placeable && preview.canAfford;
+
+            if (preview.endBx > -1) {
+                if (placeable) {
+                    batch.setColor(0.1f, 0.8f, 0.1f, 1f);
+                } else {
+                    batch.setColor(0.8f, 0.1f, 0.1f, 1f);
+                }
+
+                for (Structure<?> s : preview.structures) {
+                    s.draw(delegate);
+                }
+
+                if (preview.endAx > -1) {
+                    batch.draw(endMarkerGlow, (preview.endAx + 0.5f) * Const.TILE_SIZE
+                            - endMarkerA.getRegionWidth() / 2,
+                            (preview.endAy + 0.2f) * Const.TILE_SIZE);
+                }
+                if (preview.endBx > -1) {
+                    batch.draw(endMarkerGlow, (preview.endBx + 0.5f) * Const.TILE_SIZE
+                            - endMarker.getRegionWidth() / 2,
+                            (preview.endBy + 0.2f) * Const.TILE_SIZE);
+                    drewLines = true;
+                }
+            } else {
+                if (placeable) {
+                    batch.setColor(0.75f, 1f, 0.5f, 1f);
+                } else {
+                    batch.setColor(1f, 0.5f, 0.5f, 1f);
+                }
+
+                for (Structure<?> s : preview.structures) {
+                    s.draw(delegate);
+                }
+
+                if (preview.endAx > -1) {
+                    if (placeable) {
+                        batch.setColor(0.1f, 0.8f, 0.1f, 1f);
+                    } else {
+                        batch.setColor(0.8f, 0.1f, 0.1f, 1f);
+                    }
+                    batch.draw(endMarkerGlow, (preview.endAx + 0.5f) * Const.TILE_SIZE
+                            - endMarkerA.getRegionWidth() / 2,
+                            (preview.endAy + 0.2f) * Const.TILE_SIZE);
+                }
+            }
+
+            batch.setColor(1f, 1f, 1f, 1f);
+        }
+
+        if (!drewPreview) {
+            return;
+        }
+
+        if (drewLines) {
+            batch.end();
+            shaper.setProjectionMatrix(cam.combined);
+            shaper.begin(ShapeType.Filled);
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+
+            for (RemotePlacementPreviewState preview : previews) {
+                if (preview.clientId == localClientId) {
+                    continue;
+                }
+                if (!preview.visible || preview.layer != layerIndex || preview.endAx < 0 || preview.endBx < 0) {
+                    continue;
+                }
+
+                boolean placeable = preview.placeable && preview.canAfford;
+                if (placeable) {
+                    shaper.setColor(0.1f, 0.8f, 0.1f, 0.75f);
+                } else {
+                    shaper.setColor(0.8f, 0.1f, 0.1f, 0.75f);
+                }
+                shaper.rectLine((preview.endAx + 0.5f) * Const.TILE_SIZE, (preview.endAy + 0.5f) * Const.TILE_SIZE,
+                        (preview.endBx + 0.5f) * Const.TILE_SIZE, (preview.endBy + 0.5f) * Const.TILE_SIZE, 6);
+
+                if (placeable) {
+                    shaper.setColor(0.2f, 1f, 0.2f, 0.6f);
+                } else {
+                    shaper.setColor(1f, 0.2f, 0.2f, 0.6f);
+                }
+                shaper.rectLine((preview.endAx + 0.5f) * Const.TILE_SIZE, (preview.endAy + 0.5f) * Const.TILE_SIZE,
+                        (preview.endBx + 0.5f) * Const.TILE_SIZE, (preview.endBy + 0.5f) * Const.TILE_SIZE, 2);
+            }
+
+            shaper.end();
+            batch.begin();
+        }
+
+        batch.setColor(1f, 1f, 1f, 1f);
+        for (RemotePlacementPreviewState preview : previews) {
+            if (preview.clientId == localClientId) {
+                continue;
+            }
+            if (!preview.visible || preview.layer != layerIndex) {
+                continue;
+            }
+
+            if (preview.endBx > -1) {
+                float factorA = (preview.activeEnd == 1 ? 1.35f : 1f);
+                float widthA = endMarkerA.getRegionWidth() * factorA;
+                float heightA = endMarkerA.getRegionHeight() * factorA;
+
+                if (preview.endAy > preview.endBy) {
+                    batch.draw(endMarkerA, (preview.endAx + 0.5f) * Const.TILE_SIZE - widthA / 2,
+                            (preview.endAy + 0.2f * 1 / factorA) * Const.TILE_SIZE, widthA, heightA);
+
+                    float factorB = (preview.activeEnd == 2 ? 1.35f : 1f);
+                    float widthB = endMarker.getRegionWidth() * factorB;
+                    float heightB = endMarker.getRegionHeight() * factorB;
+                    batch.draw(endMarker, (preview.endBx + 0.5f) * Const.TILE_SIZE - widthB / 2,
+                            (preview.endBy + 0.2f * 1 / factorB) * Const.TILE_SIZE, widthB, heightB);
+                } else {
+                    float factorB = (preview.activeEnd == 2 ? 1.35f : 1f);
+                    float widthB = endMarker.getRegionWidth() * factorB;
+                    float heightB = endMarker.getRegionHeight() * factorB;
+                    batch.draw(endMarker, (preview.endBx + 0.5f) * Const.TILE_SIZE - widthB / 2,
+                            (preview.endBy + 0.2f * 1 / factorB) * Const.TILE_SIZE, widthB, heightB);
+
+                    batch.draw(endMarkerA, (preview.endAx + 0.5f) * Const.TILE_SIZE - widthA / 2,
+                            (preview.endAy + 0.2f * 1 / factorA) * Const.TILE_SIZE, widthA, heightA);
+                }
+            } else if (preview.endAx > -1) {
+                float factorA = (preview.activeEnd == 1 ? 1.35f : 1f);
+                float widthA = endMarkerA.getRegionWidth() * factorA;
+                float heightA = endMarkerA.getRegionHeight() * factorA;
+                batch.draw(endMarkerA, (preview.endAx + 0.5f) * Const.TILE_SIZE - widthA / 2,
+                        (preview.endAy + 0.2f * 1 / factorA) * Const.TILE_SIZE, widthA, heightA);
+            }
+        }
     }
 
     public void drawOverlay() {
@@ -4727,6 +4972,12 @@ public class Game extends GameScene {
         }
     }
 
+    public void removeRemotePlacementPreview(long clientId) {
+        synchronized (remotePlacementPreviewLock) {
+            remotePlacementPreviews.remove(clientId);
+        }
+    }
+
     public Collection<RemoteCursorState> getRemoteCursorSnapshot() {
         ArrayList<RemoteCursorState> result = new ArrayList<>();
         synchronized (remoteCursorLock) {
@@ -4736,6 +4987,139 @@ public class Game extends GameScene {
             }
         }
         return result;
+    }
+
+    public Collection<RemotePlacementPreviewState> getRemotePlacementPreviewSnapshot() {
+        ArrayList<RemotePlacementPreviewState> result = new ArrayList<>();
+        synchronized (remotePlacementPreviewLock) {
+            Iterator<Map.Entry<Long, RemotePlacementPreviewState>> it = remotePlacementPreviews.entrySet().iterator();
+            while (it.hasNext()) {
+                result.add(it.next().getValue());
+            }
+        }
+        return result;
+    }
+
+    private void updateRemotePlacementPreview(long clientId, int previewLayer, boolean visible, boolean placeable,
+            boolean canAfford, int endAx, int endAy, int endBx, int endBy, int activeEnd,
+            List<Structure<?>> structures) {
+        synchronized (remotePlacementPreviewLock) {
+            if (!visible) {
+                remotePlacementPreviews.remove(clientId);
+                return;
+            }
+
+            if (structures.isEmpty() && endAx < 0 && endBx < 0) {
+                remotePlacementPreviews.remove(clientId);
+                return;
+            }
+
+            remotePlacementPreviews.put(clientId, new RemotePlacementPreviewState(clientId, previewLayer, true,
+                    placeable, canAfford, endAx, endAy, endBx, endBy, activeEnd, new ArrayList<>(structures)));
+        }
+    }
+
+    private static long mixPlacementPreviewSignature(long hash, int value) {
+        hash ^= value;
+        hash *= 1099511628211L;
+        return hash;
+    }
+
+    private static long mixPlacementPreviewSignature(long hash, boolean value) {
+        return mixPlacementPreviewSignature(hash, value ? 1 : 0);
+    }
+
+    private CompoundTag copyPlacementPreviewStructure(Structure<?> structure) {
+        Layer previousLayer = structure.layer;
+        structure.layer = layer;
+        try {
+            return structure.copy(PREVIEW_COPY_REGION);
+        } finally {
+            structure.layer = previousLayer;
+        }
+    }
+
+    private long computePlacementPreviewSignature(boolean visible, boolean placeable, boolean canAfford,
+            int previewLayer, int endAx, int endAy, int endBx, int endBy, int activeEnd, List<CompoundTag> structures) {
+        if (!visible) {
+            return Long.MIN_VALUE;
+        }
+
+        long hash = 0xcbf29ce484222325L;
+        hash = mixPlacementPreviewSignature(hash, previewLayer);
+        hash = mixPlacementPreviewSignature(hash, placeable);
+        hash = mixPlacementPreviewSignature(hash, canAfford);
+        hash = mixPlacementPreviewSignature(hash, endAx);
+        hash = mixPlacementPreviewSignature(hash, endAy);
+        hash = mixPlacementPreviewSignature(hash, endBx);
+        hash = mixPlacementPreviewSignature(hash, endBy);
+        hash = mixPlacementPreviewSignature(hash, activeEnd);
+        hash = mixPlacementPreviewSignature(hash, structures.size());
+        for (CompoundTag tag : structures) {
+            hash = mixPlacementPreviewSignature(hash, tag.toString().hashCode());
+        }
+        return hash;
+    }
+
+    private void syncLocalPlacementPreview() {
+        if (lanSession == null || lanApplyingCommand) {
+            return;
+        }
+
+        boolean visible = layer != null && activeStructure != null
+                && (activeStructure.x > -1 || endA.x > -1)
+                && !structureDestroyMode && !cableDestroyMode
+                && !bulkDestroyMode && !bulkCableMode
+                && !copyMode && !pasteMode;
+
+        if (!visible) {
+            if (localPlacementPreviewSignature != Long.MIN_VALUE) {
+                localPlacementPreviewSignature = Long.MIN_VALUE;
+                NBT.Builder cmd = new NBT.Builder("Command")
+                        .String("kind", "build_preview")
+                        .Int("layer", layerIndex)
+                        .Byte("visible", (byte) 0);
+                emitLanCommand(cmd.Get());
+            }
+            return;
+        }
+
+        boolean placeable = camControl != null && camControl.elementPlaceable;
+        boolean canAfford = ui != null && ui.canAffordStructure;
+
+        ArrayList<CompoundTag> structures = new ArrayList<>();
+        if (endB.x > -1) {
+            for (Structure<?> s : activeStructureTrail.values()) {
+                structures.add(copyPlacementPreviewStructure(s));
+            }
+        } else {
+            structures.add(copyPlacementPreviewStructure(activeStructure));
+        }
+
+        long signature = computePlacementPreviewSignature(true, placeable, canAfford, layerIndex, (int) endA.x,
+                (int) endA.y, (int) endB.x, (int) endB.y, activeEnd, structures);
+        if (signature == localPlacementPreviewSignature) {
+            return;
+        }
+        localPlacementPreviewSignature = signature;
+
+        NBT.Builder cmd = new NBT.Builder("Command")
+                .String("kind", "build_preview")
+                .Int("layer", layerIndex)
+                .Byte("visible", (byte) 1)
+                .Byte("placeable", (byte) (placeable ? 1 : 0))
+                .Byte("canAfford", (byte) (canAfford ? 1 : 0))
+                .Int("endAx", (int) endA.x)
+                .Int("endAy", (int) endA.y)
+                .Int("endBx", (int) endB.x)
+                .Int("endBy", (int) endB.y)
+                .Int("activeEnd", activeEnd)
+                .List("structures", TagType.Compound);
+        for (CompoundTag tag : structures) {
+            cmd.add(tag);
+        }
+        cmd.End();
+        emitLanCommand(cmd.Get());
     }
 
 }

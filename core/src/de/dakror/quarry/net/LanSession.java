@@ -261,6 +261,12 @@ public final class LanSession {
                     broadcastCommand(tag, fromClientId);
                 }
                 return;
+            } else if ("build_preview".equals(kind)) {
+                game.applyLanPlacementPreview(tag);
+                if (host) {
+                    broadcastCommand(tag, fromClientId);
+                }
+                return;
             }
             Gdx.app.postRunnable(new Runnable() {
                 @Override
@@ -336,6 +342,7 @@ public final class LanSession {
                     }
                 } finally {
                     game.removeRemoteCursor(clientId);
+                    game.removeRemotePlacementPreview(clientId);
                     close();
                 }
             }, "lan-host-client");
