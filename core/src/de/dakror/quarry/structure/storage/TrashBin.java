@@ -45,11 +45,6 @@ public class TrashBin extends Structure<Schema> {
     }
 
     @Override
-    public void drawFrame(SpriteRenderer spriter, com.badlogic.gdx.graphics.glutils.ShapeRenderer shaper, SpriterDelegateBatch pfxBatch) {
-        super.drawFrame(spriter, shaper, pfxBatch);
-    }
-
-    @Override
     protected void saveData(Builder b) {
         super.saveData(b);
     }

@@ -20,7 +20,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.Array;
@@ -130,7 +133,20 @@ public class Schema {
             try {
                 icon = Quarry.Q.skin.getDrawable("structure_" + tex);
             } catch (Exception e) {
-                icon = Quarry.Q.skin.getDrawable("structure_redstone");
+                TextureRegion fallback = null;
+                if ("trashbin".equals(tex)) {
+                    fallback = loadStandaloneRegion("icon_trashbin.png");
+                    if (fallback == null) {
+                        fallback = loadStandaloneRegion("trashbin.png");
+                    }
+                }
+                if (fallback == null) {
+                    fallback = Quarry.Q.atlas.findRegion("icon_" + tex);
+                    if (fallback == null) {
+                        fallback = Quarry.Q.atlas.findRegion("structure_" + tex);
+                    }
+                }
+                icon = fallback != null ? new TextureRegionDrawable(fallback) : Quarry.Q.skin.getDrawable("structure_redstone");
             }
         }
         this.icon = icon;
@@ -275,5 +291,15 @@ public class Schema {
 
     public Dock[] getDocks() {
         return docks;
+    }
+
+    private static TextureRegion loadStandaloneRegion(String path) {
+        try {
+            Texture texture = new Texture(Gdx.files.internal(path));
+            texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Nearest);
+            return new TextureRegion(texture);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
