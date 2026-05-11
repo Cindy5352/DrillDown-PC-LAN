@@ -2323,9 +2323,24 @@ public class Game extends GameScene {
     }
 
     public CompoundTag snapshotStructure(Structure<?> structure) {
-        Builder b = new Builder(null);
+        Builder b = new Builder("Snapshot").List("Structure", TagType.Compound);
         structure.save(b);
-        CompoundTag tag = b.Get();
+        CompoundTag root = b.End().Get();
+        Tag listTag = root.get("Structure");
+        if (!(listTag instanceof ListTag)) {
+            root.free();
+            return null;
+        }
+
+        ListTag list = (ListTag) listTag;
+        if (list.data.isEmpty()) {
+            root.free();
+            return null;
+        }
+
+        CompoundTag tag = (CompoundTag) list.data.removeIndex(0);
+        tag.parent = null;
+        root.free();
         return tag;
     }
 
@@ -5146,6 +5161,9 @@ public class Game extends GameScene {
                     }
 
                     CompoundTag state = snapshotStructure(storage);
+                    if (state == null) {
+                        continue;
+                    }
                     state.Int("layer", l.getIndex());
                     states.add(state);
                 }
