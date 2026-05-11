@@ -176,6 +176,7 @@ import de.dakror.quarry.structure.storage.Barrel;
 import de.dakror.quarry.structure.storage.DigitalStorage;
 import de.dakror.quarry.structure.storage.Silo;
 import de.dakror.quarry.structure.storage.Storage;
+import de.dakror.quarry.structure.storage.TrashBin;
 import de.dakror.quarry.structure.storage.Tank;
 import de.dakror.quarry.structure.storage.Warehouse;
 import de.dakror.quarry.ui.Alert;
@@ -904,6 +905,7 @@ public class GameUi implements Ui {
 
         buildMenuItem(stor, new Storage(-1, 0));
         buildMenuItem(stor, new Barrel(-1, 0));
+        buildMenuItem(stor, new TrashBin(-1, 0));
         buildMenuItem(stor, new Warehouse(-1, 0));
         buildMenuItem(stor, new DigitalStorage(-1, 0));
         buildMenuItem(stor, new Tank(-1, 0));

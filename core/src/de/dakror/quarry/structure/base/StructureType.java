@@ -95,6 +95,7 @@ import de.dakror.quarry.structure.storage.Barrel;
 import de.dakror.quarry.structure.storage.DigitalStorage;
 import de.dakror.quarry.structure.storage.Silo;
 import de.dakror.quarry.structure.storage.Storage;
+import de.dakror.quarry.structure.storage.TrashBin;
 import de.dakror.quarry.structure.storage.Tank;
 import de.dakror.quarry.structure.storage.Warehouse;
 
@@ -125,6 +126,7 @@ public enum StructureType {
     Barrel(23, Barrel.class),
     Silo(24, Silo.class),
     DigitalStorage(25, DigitalStorage.class),
+    TrashBin(26, TrashBin.class),
 
     // producers
     Mine(40, Mine.class),
