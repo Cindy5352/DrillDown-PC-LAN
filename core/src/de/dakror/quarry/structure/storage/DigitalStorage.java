@@ -90,6 +90,9 @@ public class DigitalStorage extends Storage {
                             DigitalStorage st = (DigitalStorage) data;
                             Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }))
                     .sciences(ScienceType.BetterStorage, ScienceType.HighTech);

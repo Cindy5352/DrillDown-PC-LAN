@@ -239,9 +239,22 @@ public class Boiler extends PausableStructure<PausableSchema> {
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        heatLevel = 0;
+        decay = recipe.heatDecayTime;
+        workingTime = recipe.workingTime;
         super.loadData(tag);
         heatLevel = tag.Int("heat", 0);
         decay = tag.Float("decay", 0);
         workingTime = tag.Float("workingTime", 0);
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

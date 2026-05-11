@@ -105,6 +105,9 @@ public class Storage extends StorageStructure {
                             Storage st = (Storage) data;
                             Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }));
 
@@ -289,6 +292,10 @@ public class Storage extends StorageStructure {
         if (t != null) {
             updateOutputCellBackgrounds();
         }
+
+        if (Game.G != null) {
+            Game.G.queueLanStructureStateSync(this);
+        }
     }
 
     protected void updateOutputCellBackgrounds() {
@@ -345,10 +352,13 @@ public class Storage extends StorageStructure {
             for (short s : outs) {
                 ItemType t = Item.get(s);
 
-                if (t != null)
-                    setOutput(t, true);
+                if (t != null) {
+                    outputs.add(t);
+                }
             }
         }
+
+        pumping = outputs.size > 0;
     }
 
     @Override
@@ -376,10 +386,13 @@ public class Storage extends StorageStructure {
             for (short s : outs) {
                 ItemType t = Item.get(s);
 
-                if (t != null)
-                    setOutput(t, true);
+                if (t != null) {
+                    outputs.add(t);
+                }
             }
         }
+
+        pumping = outputs.size > 0;
     }
 
     @Override

@@ -392,6 +392,10 @@ public class Refinery extends PausableStructure<PausableSchema> {
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        powerLevel = 0;
+        workingTime0 = -1;
+        workingTime1 = -1;
+        noPower = false;
         super.loadData(tag);
         try {
             powerLevel = tag.Double("power");
@@ -400,5 +404,15 @@ public class Refinery extends PausableStructure<PausableSchema> {
         }
         workingTime0 = tag.Float("wt0", -1);
         workingTime1 = tag.Float("wt1", -1);
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

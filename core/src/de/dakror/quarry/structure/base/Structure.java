@@ -267,6 +267,20 @@ public abstract class Structure<T extends Schema> implements Savable, Region {
             c.postLoad();
     }
 
+    public boolean shouldSyncLanState() {
+        return false;
+    }
+
+    public void refreshUIFromState() {
+        // optional override for live sync refresh hooks
+    }
+
+    public void applySyncedState(CompoundTag tag) throws NBTException {
+        loadData(tag);
+        postLoad();
+        refreshUIFromState();
+    }
+
     public void reloadPowerNetwork() {
         if (getSchema().powerDocks > 0) {
             powerNetwork.updateConnections(this);

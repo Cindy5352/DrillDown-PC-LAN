@@ -435,6 +435,10 @@ public class DistillationColumn extends PausableStructure<PausableSchema> {
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        level = 0;
+        powerLevel = 0;
+        noPower = false;
+        workingTime = -1;
         super.loadData(tag);
         level = tag.Byte("level", (byte) 0);
 
@@ -443,6 +447,18 @@ public class DistillationColumn extends PausableStructure<PausableSchema> {
         } catch (NBTException e) {
             powerLevel = tag.Float("power", 0);
         }
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        if (ui != null) {
+            ui.setActor(Game.G.ui.distRecipe);
+        }
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 
     @Override

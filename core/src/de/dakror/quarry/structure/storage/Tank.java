@@ -31,6 +31,7 @@ import de.dakror.quarry.game.Item.ItemCategory;
 import de.dakror.quarry.game.Item.ItemType;
 import de.dakror.quarry.game.Item.Items;
 import de.dakror.quarry.game.Science.ScienceType;
+import de.dakror.quarry.scenes.Game;
 import de.dakror.quarry.scenes.GameUi;
 import de.dakror.quarry.structure.base.Direction;
 import de.dakror.quarry.structure.base.Dock;
@@ -60,6 +61,9 @@ public class Tank extends Structure<Schema> {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             ((CTank) ((Tank) data).components[0]).setOutputEnabled(on);
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }))
                     .sciences(ScienceType.WaterUsage);
@@ -158,5 +162,15 @@ public class Tank extends Structure<Schema> {
     protected void pasteData(int[] pasteRegion, CompoundTag tag) {
         super.pasteData(pasteRegion, tag);
         ((CTank) components[0]).setOutputEnabled(tag.Byte("pumping", (byte) 0) == 1);
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

@@ -684,7 +684,7 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
         }
 
         if (previous != direction && Game.G != null) {
-            Game.G.emitLanSetRotation(this, direction);
+            Game.G.queueLanStructureStateSync(this);
         }
     }
 
@@ -753,6 +753,8 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
         for (ItemEntity e : items) {
             if (e != null) e.postLoad();
         }
+
+        refreshConnectedConveyors();
     }
 
     @Override
@@ -805,6 +807,18 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        synchronized (itemLock) {
+            for (ItemEntity e : items) {
+                if (e != null) {
+                    Pools.free(e);
+                }
+            }
+            java.util.Arrays.fill(items, null);
+            itemCount = 0;
+        }
+
+        itemChanges = true;
+        structs = null;
         super.loadData(tag);
         dir = Direction.values[tag.Byte("dir", (byte) 0)];
         structs = tag.IntArray("structs", null);
@@ -820,5 +834,10 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
                 Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
             }
         }
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

@@ -20,6 +20,7 @@ import de.dakror.common.BiCallback;
 import de.dakror.quarry.game.Item.ItemType;
 import de.dakror.quarry.game.Item.Items;
 import de.dakror.quarry.game.Science.ScienceType;
+import de.dakror.quarry.scenes.Game;
 import de.dakror.quarry.structure.base.Direction;
 import de.dakror.quarry.structure.base.Dock;
 import de.dakror.quarry.structure.base.Dock.DockType;
@@ -45,6 +46,9 @@ public class Silo extends Tank {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             ((CTank) ((Silo) data).components[0]).setOutputEnabled(on);
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }))
                     .sciences(ScienceType.BetterStorage, ScienceType.WaterUsage);

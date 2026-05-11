@@ -64,6 +64,9 @@ public class Barrel extends StorageStructure {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             ((CSingleInventory) ((Barrel) data).components[0]).setOutputEnabled(on);
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }))
                     .button(new ButtonDef("icon_destroy", "button.refund", ButtonType.StateToggle, new BiCallback<Boolean, Structure<?>>() {
@@ -72,6 +75,9 @@ public class Barrel extends StorageStructure {
                             Barrel st = (Barrel) data;
                             Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync(data);
+                            }
                         }
                     }));
 

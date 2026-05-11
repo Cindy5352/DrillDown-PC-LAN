@@ -153,10 +153,12 @@ public class ScienceLab extends Structure<Schema> {
     public boolean setActiveScience(ScienceType science) {
         if (activeScience != null && !waitingForInputs) return false;
 
-        if (activeScience != null)
+        if (activeScience != null && Game.G != null)
             Game.G.removeCurrentScience(activeScience);
 
-        Game.G.addCurrentScience(science);
+        if (Game.G != null) {
+            Game.G.addCurrentScience(science);
+        }
         activeScience = science;
         workingTime = science.workingTime;
         waitingForInputs = true;
@@ -167,6 +169,9 @@ public class ScienceLab extends Structure<Schema> {
             for (Amount a : science.costs.entries) {
                 updateUIAmount(a.getItem());
             }
+        }
+        if (Game.G != null) {
+            Game.G.queueLanStructureStateSync(this);
         }
         return true;
     }
@@ -298,6 +303,12 @@ public class ScienceLab extends Structure<Schema> {
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        if (activeScience != null && Game.G != null) {
+            Game.G.removeCurrentScience(activeScience);
+        }
+        activeScience = null;
+        waitingForInputs = false;
+        workingTime = 0;
         super.loadData(tag);
         int science = tag.Byte("science", (byte) 0) & 0xff;
         if (science != 0) {
@@ -312,5 +323,23 @@ public class ScienceLab extends Structure<Schema> {
                 Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
             }
         }
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+
+        if (activeScience != null && waitingForInputs && items != null && cells != null) {
+            items.clear();
+            cells.clear();
+            for (Amount a : activeScience.costs.entries) {
+                updateUIAmount(a.getItem());
+            }
+        }
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

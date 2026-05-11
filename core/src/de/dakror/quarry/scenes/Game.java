@@ -1301,6 +1301,7 @@ public class Game extends GameScene {
 
         @Override
         protected void placeActiveElement() {
+            Array<Structure<?>> lanStateSyncTargets = new Array<>();
             Game.this.pauseStructureStateSync();
             try {
             if (endB.x > -1) {
@@ -1319,14 +1320,19 @@ public class Game extends GameScene {
                         int dx = first / layer.height - (int) endA.x;
                         int dy = first % layer.height - (int) endA.y;
 
-                        if (dx == -1)
+                        if (dx == -1) {
                             ((IRotatable) s).setRotation(Direction.West);
-                        else if (dx == 1)
+                            lanStateSyncTargets.add(s);
+                        } else if (dx == 1) {
                             ((IRotatable) s).setRotation(Direction.East);
-                        else if (dy == -1)
+                            lanStateSyncTargets.add(s);
+                        } else if (dy == -1) {
                             ((IRotatable) s).setRotation(Direction.South);
-                        else if (dy == 1)
+                            lanStateSyncTargets.add(s);
+                        } else if (dy == 1) {
                             ((IRotatable) s).setRotation(Direction.North);
+                            lanStateSyncTargets.add(s);
+                        }
                     }
                 }
 
@@ -1340,6 +1346,7 @@ public class Game extends GameScene {
                             if (q != null && q.getSchema().type == StructureType.Conveyor) {
                                 if (((Conveyor) q).getStructureInDirection(((Conveyor) q).getDirection()) == null) {
                                     ((Conveyor) q).setRotation(d.inv());
+                                    lanStateSyncTargets.add(q);
                                     break;
                                 }
                             }
@@ -1416,7 +1423,7 @@ public class Game extends GameScene {
                     if (activeStructure instanceof ConveyorBridge) {
                         Structure<?> x = layer.getStructure(activeStructure.x, activeStructure.y);
                         if (x != null && x.getSchema().type == StructureType.Conveyor) {
-                            layer.removeStructure(x);
+                            removeStructureInternal(x, false, false);
                         }
                     }
 
@@ -1432,6 +1439,10 @@ public class Game extends GameScene {
             }
             } finally {
                 Game.this.resumeStructureStateSync();
+            }
+
+            if (Game.this.lanSession != null && lanStateSyncTargets.size > 0) {
+                Game.this.forceLanStructureStateSync(lanStateSyncTargets);
             }
         }
 
@@ -1607,8 +1618,8 @@ public class Game extends GameScene {
     private boolean remoteCursorDebugProjectLogged;
     private boolean localCursorDebugSendLogged;
     private long localPlacementPreviewSignature = Long.MIN_VALUE;
-    private static final float LAN_STORAGE_SYNC_INTERVAL = 0.5f;
-    private float lanStorageSyncAcc = 0f;
+    private static final float LAN_STATE_SYNC_INTERVAL = 0.5f;
+    private float lanStateSyncAcc = 0f;
     private int structureStateSyncPauseDepth = 0;
     public final PowerGrid powerGrid = new PowerGrid();
     AStar<Integer> tilePathfinding;
@@ -2057,7 +2068,7 @@ public class Game extends GameScene {
             lanSession.close();
             lanSession = null;
         }
-        lanStorageSyncAcc = 0f;
+        lanStateSyncAcc = 0f;
         synchronized (remoteCursorLock) {
             remoteCursors.clear();
         }
@@ -2072,7 +2083,7 @@ public class Game extends GameScene {
         localCursorScreenY = Integer.MIN_VALUE;
         localCursorVisible = false;
         localPlacementPreviewSignature = Long.MIN_VALUE;
-        lanStorageSyncAcc = 0f;
+        lanStateSyncAcc = 0f;
     }
 
     public void returnToMainMenu() {
@@ -2130,6 +2141,81 @@ public class Game extends GameScene {
         emitLanCommand(cmd.Get());
     }
 
+    public void queueLanStructureStateSync(Structure<?> structure) {
+        if (structure == null || structure.layer == null) {
+            return;
+        }
+
+        if (!canSyncStructureState()) {
+            return;
+        }
+
+        syncLanStructureStates(java.util.Collections.singletonList(structure), true);
+    }
+
+    public void queueLanStructureStateSync(Iterable<? extends Structure<?>> structures) {
+        if (!canSyncStructureState()) {
+            return;
+        }
+
+        syncLanStructureStates(structures, true);
+    }
+
+    public void forceLanStructureStateSync(Structure<?> structure) {
+        if (structure == null || structure.layer == null) {
+            return;
+        }
+
+        syncLanStructureStates(java.util.Collections.singletonList(structure), true);
+    }
+
+    public void forceLanStructureStateSync(Iterable<? extends Structure<?>> structures) {
+        syncLanStructureStates(structures, true);
+    }
+
+    private void syncLanStructureStates(Iterable<? extends Structure<?>> structures, boolean force) {
+        if (lanSession == null || lanApplyingCommand) {
+            return;
+        }
+
+        if (!force && !canSyncStructureState()) {
+            return;
+        }
+
+        ArrayList<CompoundTag> states = new ArrayList<>();
+        for (Structure<?> structure : structures) {
+            if (structure == null || structure.layer == null || !structure.shouldSyncLanState()) {
+                continue;
+            }
+
+            CompoundTag state = snapshotStructure(structure);
+            if (state == null) {
+                continue;
+            }
+            state.Int("layer", structure.layer.getIndex());
+            states.add(state);
+        }
+
+        if (states.isEmpty()) {
+            return;
+        }
+
+        Builder cmd = new NBT.Builder("Command")
+                .String("kind", "structure_sync")
+                .List("states", TagType.Compound);
+        for (CompoundTag state : states) {
+            cmd.add(state);
+        }
+        cmd.End();
+
+        CompoundTag payload = cmd.Get();
+        try {
+            emitLanCommand(payload);
+        } finally {
+            payload.free();
+        }
+    }
+
     public void applyLanCommand(CompoundTag command) {
         String kind = command.String("kind", "");
         boolean old = lanApplyingCommand;
@@ -2156,8 +2242,8 @@ public class Game extends GameScene {
                 applyLanPlacementPreview(command);
             } else if ("set_rotation".equals(kind)) {
                 applyLanSetRotation(command);
-            } else if ("storage_sync".equals(kind)) {
-                applyLanStorageSync(command);
+            } else if ("storage_sync".equals(kind) || "structure_sync".equals(kind)) {
+                applyLanStructureSync(command);
             }
         } finally {
             lanApplyingCommand = old;
@@ -2299,7 +2385,7 @@ public class Game extends GameScene {
         }
     }
 
-    protected void applyLanStorageSync(CompoundTag command) {
+    protected void applyLanStructureSync(CompoundTag command) {
         try {
             ListTag list = command.List("states");
             for (Tag t : list.data) {
@@ -2320,13 +2406,20 @@ public class Game extends GameScene {
                 }
 
                 Structure<?> s = targetLayer.getStructure(x, y);
-                if (!(s instanceof StorageStructure)) {
+                if (s == null) {
                     continue;
                 }
 
                 try {
-                    ((StorageStructure) s).applySyncedState(state);
+                    if (state.Byte("type", (byte) -1) != s.getSchema().type.id) {
+                        continue;
+                    }
+
+                    s.applySyncedState(state);
                     s.setItemNotifications();
+                    if (targetLayer == layer && camControl != null) {
+                        camControl.updateActiveElementPlaceable();
+                    }
                 } catch (Exception e) {
                     Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
                 }
@@ -2687,7 +2780,7 @@ public class Game extends GameScene {
         ui.update(deltaTime);
         syncLocalCursor(deltaTime);
         syncLocalPlacementPreview();
-        syncLanStorageStates(deltaTime);
+        syncLanStatefulStructures(deltaTime);
 
         spatializer.setCenter(cam.position.x, cam.position.y, cam.zoom / 0.5f);
         spatializedPlayer.update((float) deltaTime);
@@ -5148,60 +5241,51 @@ public class Game extends GameScene {
         emitLanCommand(cmd.Get());
     }
 
-    private void syncLanStorageStates(double deltaTime) {
-        if (lanSession == null || !lanSession.isHost() || !lanSession.hasClients()) {
+    private void syncLanStatefulStructures(double deltaTime) {
+        if (lanSession == null || lanApplyingCommand || !lanSession.isHost() || !lanSession.hasClients()) {
             return;
         }
 
-        lanStorageSyncAcc += (float) deltaTime;
-        if (lanStorageSyncAcc < LAN_STORAGE_SYNC_INTERVAL) {
+        lanStateSyncAcc += (float) deltaTime;
+        if (lanStateSyncAcc < LAN_STATE_SYNC_INTERVAL) {
             return;
         }
-        lanStorageSyncAcc %= LAN_STORAGE_SYNC_INTERVAL;
+        lanStateSyncAcc %= LAN_STATE_SYNC_INTERVAL;
 
-        ArrayList<CompoundTag> states = new ArrayList<>();
+        ArrayList<Structure<?>> structures = new ArrayList<>();
         synchronized (layerLock) {
             if (layers == null) {
                 return;
             }
 
             for (Layer l : layers) {
-                if (l == null) {
+                if (l == null || l.fake) {
                     continue;
                 }
-                for (StorageStructure storage : l.storages) {
-                    if (storage == null) {
+
+                for (Chunk c : l.getChunks()) {
+                    if (c == null || !c.isInit()) {
                         continue;
                     }
 
-                    CompoundTag state = snapshotStructure(storage);
-                    if (state == null) {
-                        continue;
+                    for (Structure<?> structure : c.getStructures()) {
+                        if (structure == null) {
+                            break;
+                        }
+
+                        if (structure.shouldSyncLanState()) {
+                            structures.add(structure);
+                        }
                     }
-                    state.Int("layer", l.getIndex());
-                    states.add(state);
                 }
             }
         }
 
-        if (states.isEmpty()) {
+        if (structures.isEmpty()) {
             return;
         }
 
-        Builder cmd = new NBT.Builder("Command")
-                .String("kind", "storage_sync")
-                .List("states", TagType.Compound);
-        for (CompoundTag state : states) {
-            cmd.add(state);
-        }
-        cmd.End();
-
-        CompoundTag payload = cmd.Get();
-        try {
-            emitLanCommand(payload);
-        } finally {
-            payload.free();
-        }
+        syncLanStructureStates(structures, false);
     }
 
     private void updateRemoteCursor(long clientId, int cursorLayer, int tileX, int tileY, int screenX, int screenY,

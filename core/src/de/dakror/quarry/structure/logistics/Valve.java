@@ -84,6 +84,9 @@ public class Valve extends FluidTubeStructure implements IRotatable {
             ui.setChecked(flowDir == dir.inv());
         }
         updateStructures();
+        if (Game.G != null) {
+            Game.G.queueLanStructureStateSync(this);
+        }
     }
 
     @Override
@@ -195,6 +198,8 @@ public class Valve extends FluidTubeStructure implements IRotatable {
 
     @Override
     public void loadData(CompoundTag tag) throws NBTException {
+        dir = Direction.South;
+        flowDir = Direction.North;
         super.loadData(tag);
 
         try {
@@ -230,6 +235,16 @@ public class Valve extends FluidTubeStructure implements IRotatable {
         } catch (NBTException e) {
             Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
         }
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateFlowDir();
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 
     @Override

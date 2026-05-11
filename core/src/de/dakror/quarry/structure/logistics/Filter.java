@@ -36,6 +36,7 @@ import de.dakror.quarry.game.Science.ScienceType;
 import de.dakror.quarry.scenes.Game;
 import de.dakror.quarry.structure.base.Direction;
 import de.dakror.quarry.structure.base.RouterStructure;
+import de.dakror.quarry.structure.base.Structure;
 import de.dakror.quarry.structure.base.StructureType;
 import de.dakror.quarry.util.Util;
 
@@ -104,6 +105,9 @@ public class Filter extends RouterStructure {
     }
 
     private void updateUI() {
+        if (ui == null) {
+            return;
+        }
         int i = 0;
         for (Actor a : ui.getChildren()) {
             if (a instanceof ImageButton) {
@@ -146,6 +150,9 @@ public class Filter extends RouterStructure {
                             ((Filter) ui.getUserObject()).filters[me] = data;
                             updateUI();
                             setItemNotifications();
+                            if (Game.G != null) {
+                                Game.G.queueLanStructureStateSync((Structure<?>) ui.getUserObject());
+                            }
                         }
                     };
                     a.addListener(new ClickListener() {
@@ -173,6 +180,9 @@ public class Filter extends RouterStructure {
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
         super.loadData(tag);
+        for (int i = 0; i < filters.length; i++) {
+            filters[i] = null;
+        }
         short[] s = tag.ShortArray("filters", null);
         if (s != null) {
             for (int i = 0; i < 4; i++) {
@@ -206,11 +216,24 @@ public class Filter extends RouterStructure {
     @Override
     protected void pasteData(int[] pasteRegion, CompoundTag tag) {
         super.pasteData(pasteRegion, tag);
+        for (int i = 0; i < filters.length; i++) {
+            filters[i] = null;
+        }
         short[] s = tag.ShortArray("filters", null);
         if (s != null) {
             for (int i = 0; i < 4; i++) {
                 filters[i] = s[i] == 0 ? null : Item.get(s[i]);
             }
         }
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

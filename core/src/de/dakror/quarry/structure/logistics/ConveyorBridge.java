@@ -168,6 +168,9 @@ public class ConveyorBridge extends Conveyor implements IItemZModifier, IFlippab
     public void flip() {
         dir2Prev = !dir2Prev;
         refreshConnectedConveyors();
+        if (Game.G != null) {
+            Game.G.queueLanStructureStateSync(this);
+        }
     }
 
     @Override
@@ -197,5 +200,10 @@ public class ConveyorBridge extends Conveyor implements IItemZModifier, IFlippab
     protected void pasteData(int[] pasteRegion, CompoundTag tag) {
         super.pasteData(pasteRegion, tag);
         dir2Prev = tag.Byte("prev", (byte) 1) == 1;
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 }

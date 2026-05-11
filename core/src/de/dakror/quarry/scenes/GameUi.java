@@ -646,13 +646,15 @@ public class GameUi implements Ui {
     }
 
     public void rotateActiveStructure() {
+        Structure<?> syncTarget = null;
+        Array<Structure<?>> syncTargets = null;
         Game.G.pauseStructureStateSync();
         try {
-            Structure<?> syncTarget = null;
-            boolean sync = false;
             if (tooltipCurrentStructure != null) {
                 if (tooltipCurrentStructure instanceof IRotatable) {
                     if (!Game.G.activeStructureTrail.isEmpty() && Game.G.endB.x > -1) {
+                        syncTargets = new Array<>();
+                        syncTargets.add(tooltipCurrentStructure);
                         int tx = (int) Game.G.endA.x, ty = (int) Game.G.endA.y;
                         Game.G.endA.set(Game.G.endB);
                         Game.G.endB.set(tx, ty);
@@ -670,8 +672,10 @@ public class GameUi implements Ui {
                                 }
 
                                 ((IRotatable) s).setRotation(rotation);
+                                syncTargets.add(s);
                             } else {
                                 ((IRotatable) s).setRotation(((IRotatable) s).getDirection().inv());
+                                syncTargets.add(s);
                             }
                             last = s;
                         }
@@ -686,45 +690,47 @@ public class GameUi implements Ui {
                     } else {
                         ((IRotatable) tooltipCurrentStructure).rotate();
                         syncTarget = tooltipCurrentStructure;
-                        sync = true;
                     }
                 } else if (!tooltipCurrentStructure.getSchema().has(Flags.NotRotatable)) {
                     tooltipCurrentStructure.setUpDirection(tooltipCurrentStructure.getUpDirection().next());
                     syncTarget = tooltipCurrentStructure;
-                    sync = true;
                 }
                 Game.G.camControl.updateActiveElementPlaceable();
             } else if (currentClickedStructure instanceof IRotatable) {
                 ((IRotatable) currentClickedStructure).rotate();
                 syncTarget = currentClickedStructure;
-                sync = true;
-            }
-
-            if (sync && syncTarget != null && Game.G.lanSession != null && !Game.G.activeStructureTrail.isEmpty()) {
-                sync = false;
-            }
-            if (sync && syncTarget != null && Game.G.lanSession != null) {
-                NBT.Builder cmd = new NBT.Builder("Command")
-                        .String("kind", "rotate")
-                        .Int("x", syncTarget.x)
-                        .Int("y", syncTarget.y)
-                        .Int("layer", Game.G.layerIndex);
-                Game.G.emitLanCommand(cmd.Get());
             }
         } finally {
             Game.G.resumeStructureStateSync();
         }
+
+        if (Game.G.lanSession != null) {
+            if (syncTargets != null && syncTargets.size > 0) {
+                Game.G.forceLanStructureStateSync(syncTargets);
+            } else if (syncTarget != null) {
+                Game.G.forceLanStructureStateSync(syncTarget);
+            }
+        }
     }
 
     public void flipActiveStructure() {
+        Structure<?> syncTarget = null;
+        Array<Structure<?>> syncTargets = null;
         Game.G.pauseStructureStateSync();
         try {
-            Structure<?> syncTarget = null;
             if (tooltipCurrentStructure instanceof IFlippable) {
                 ((IFlippable) tooltipCurrentStructure).flip();
                 Game.G.camControl.updateActiveElementPlaceable();
-                for (Structure<?> s : Game.G.activeStructureTrail.values())
+                if (!Game.G.activeStructureTrail.isEmpty()) {
+                    syncTargets = new Array<>();
+                    syncTargets.add(tooltipCurrentStructure);
+                }
+                for (Structure<?> s : Game.G.activeStructureTrail.values()) {
+                    if (syncTargets != null) {
+                        syncTargets.add(s);
+                    }
                     ((IFlippable) s).flip();
+                }
                 if (Game.G.activeStructureTrail.isEmpty()) {
                     syncTarget = tooltipCurrentStructure;
                 }
@@ -732,17 +738,16 @@ public class GameUi implements Ui {
                 ((IFlippable) currentClickedStructure).flip();
                 syncTarget = currentClickedStructure;
             }
-
-            if (syncTarget != null && Game.G.lanSession != null) {
-                NBT.Builder cmd = new NBT.Builder("Command")
-                        .String("kind", "flip")
-                        .Int("x", syncTarget.x)
-                        .Int("y", syncTarget.y)
-                        .Int("layer", Game.G.layerIndex);
-                Game.G.emitLanCommand(cmd.Get());
-            }
         } finally {
             Game.G.resumeStructureStateSync();
+        }
+
+        if (Game.G.lanSession != null) {
+            if (syncTargets != null && syncTargets.size > 0) {
+                Game.G.forceLanStructureStateSync(syncTargets);
+            } else if (syncTarget != null) {
+                Game.G.forceLanStructureStateSync(syncTarget);
+            }
         }
     }
 

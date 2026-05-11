@@ -409,6 +409,11 @@ public abstract class ProducerStructure extends PausableStructure<ProducerSchema
         updateUI();
     }
 
+    @Override
+    public void refreshUIFromState() {
+        updateUI();
+    }
+
     protected void updateUI() {
         if (ui == null)
             return;
@@ -608,6 +613,13 @@ public abstract class ProducerStructure extends PausableStructure<ProducerSchema
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
         super.loadData(tag);
+        activeRecipeIndex = -1;
+        activeRecipe = null;
+        activeItems = null;
+        workDelay = 0;
+        powerCapacity = 0;
+        noPower = false;
+        hasCapacity = false;
         workDelay = tag.Float("workDelay", 0);
 
         try {
@@ -639,6 +651,9 @@ public abstract class ProducerStructure extends PausableStructure<ProducerSchema
                 Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
                 setRecipe(-1);
             }
+        } else {
+            activeRecipe = null;
+            activeItems = null;
         }
 
         try {
@@ -650,6 +665,11 @@ public abstract class ProducerStructure extends PausableStructure<ProducerSchema
         } catch (Exception e) {
             Quarry.Q.pi.message(PlatformInterface.MSG_EXCEPTION, e);
         }
+    }
+
+    @Override
+    public boolean shouldSyncLanState() {
+        return true;
     }
 
     @Override
