@@ -1557,6 +1557,9 @@ public class Game extends GameScene {
     private boolean remoteCursorDebugDrawLogged;
     private boolean remoteCursorDebugFilterLogged;
     private boolean remoteCursorDebugOverlayLogged;
+    private long remoteCursorRenderFrame = Long.MIN_VALUE;
+    private boolean remoteCursorRenderPathLogged;
+    private boolean remoteCursorDebugProjectLogged;
     private boolean localCursorDebugSendLogged;
     private long localPlacementPreviewSignature = Long.MIN_VALUE;
     public final PowerGrid powerGrid = new PowerGrid();
@@ -3328,6 +3331,23 @@ public class Game extends GameScene {
             if (renderThreadTasks.size > 0)
                 renderThreadTasks.removeIndex(0).run();
         }
+
+        drawRemoteCursorsOnce("draw");
+    }
+
+    private void drawRemoteCursorsOnce(String source) {
+        long frameId = Gdx.graphics.getFrameId();
+        if (remoteCursorRenderFrame == frameId) {
+            return;
+        }
+
+        remoteCursorRenderFrame = frameId;
+        if (!remoteCursorRenderPathLogged) {
+            remoteCursorRenderPathLogged = true;
+            System.out.println("remote cursor render path=" + source + " frame=" + frameId
+                    + " layer=" + layerIndex + " lan=" + (lanSession != null));
+        }
+        drawRemoteCursors();
     }
 
     private void drawRemoteCursors() {
@@ -3372,6 +3392,13 @@ public class Game extends GameScene {
             cursor.advance(delta);
             tmp3.set(cursor.renderX, cursor.renderY, 0f);
             viewport.project(tmp3);
+            if (!remoteCursorDebugProjectLogged) {
+                remoteCursorDebugProjectLogged = true;
+                System.out.println("remote cursor projected client=" + cursor.clientId + " world=" + cursor.renderX
+                        + "," + cursor.renderY + " screen=" + tmp3.x + "," + tmp3.y
+                        + " viewport=" + Gdx.graphics.getWidth() + "x" + Gdx.graphics.getHeight()
+                        + " cam=" + cam.position.x + "," + cam.position.y + " zoom=" + cam.zoom);
+            }
             remoteCursorBatch.setColor(cursor.r, cursor.g, cursor.b, 0.95f);
             remoteCursorBatch.draw(remoteCursorTexture, tmp3.x, tmp3.y - remoteCursorTexture.getRegionHeight(),
                     remoteCursorTexture.getRegionWidth(), remoteCursorTexture.getRegionHeight());
@@ -3542,7 +3569,7 @@ public class Game extends GameScene {
             remoteCursorDebugOverlayLogged = true;
             System.out.println("remote cursor overlay entered layer=" + layerIndex + " lan=" + (lanSession != null));
         }
-        drawRemoteCursors();
+        drawRemoteCursorsOnce("overlay");
     }
 
     public void drawStructureAssists(Structure<?> structure, Recipe activeRecipe) {
