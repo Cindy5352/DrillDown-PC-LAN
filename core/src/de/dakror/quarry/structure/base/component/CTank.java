@@ -252,6 +252,9 @@ public class CTank extends Component implements IStorage {
 
     @Override
     public void loadData(CompoundTag tag) {
+        fluid = null;
+        count = 0;
+
         short flu = tag.Short("fluid", (short) 0);
         if (flu != 0) {
             fluid = Item.get(flu);

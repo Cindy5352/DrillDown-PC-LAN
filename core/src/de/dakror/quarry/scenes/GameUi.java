@@ -2098,6 +2098,7 @@ public class GameUi implements Ui {
         rotateButton.addAction(sequence(visible(false), moveTo(rotateButton.getX(), tooltip.getY() + 200)));
         flipButton.addAction(sequence(visible(false), moveTo(flipButton.getX(), tooltip.getY() + 200)));
 
+        restoreTooltips();
         stage.unfocusAll();
     }
 
@@ -2106,7 +2107,27 @@ public class GameUi implements Ui {
         Game.G.pasteMode = false;
         copyTable.setVisible(false);
         copyButton.setChecked(false);
+        restoreTooltips();
         stage.unfocusAll();
+    }
+
+    public void restoreTooltips() {
+        setTooltipsEnabled(true);
+    }
+
+    public void setTooltipsEnabled(boolean enabled) {
+        if (!enabled && Game.G.isLanClient()) {
+            return;
+        }
+
+        TooltipManager man = TooltipManager.getInstance();
+        if (man.enabled == enabled) {
+            return;
+        }
+
+        // Keep hover text from leaking out of transient storage modes.
+        man.hideAll();
+        man.enabled = enabled;
     }
 
     public void showStructureUI(Structure<?> s) {
@@ -2219,6 +2240,7 @@ public class GameUi implements Ui {
 
         structureUIRecipes.setChecked(false);
         structureUIRecipes.setVisible(false);
+        restoreTooltips();
         stage.unfocusAll();
     }
 

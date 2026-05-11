@@ -53,6 +53,15 @@ public abstract class StorageStructure extends Structure<Schema> {
         this.refundStorage = refundStorage;
     }
 
+    public final void applySyncedState(CompoundTag tag) throws NBTException {
+        loadData(tag);
+        refreshUIFromState();
+    }
+
+    public void refreshUIFromState() {
+        // optional override for visible storage UIs
+    }
+
     @Override
     public boolean acceptItem(ItemType item, Structure<?> source, Direction dir) {
         return addToInventory(item, 1, source);

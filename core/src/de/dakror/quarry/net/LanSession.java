@@ -83,6 +83,17 @@ public final class LanSession {
         return localClientId;
     }
 
+    public boolean hasClients() {
+        synchronized (clientsLock) {
+            for (ClientConnection c : clients) {
+                if (c.running) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public void sendCommand(CompoundTag command) {
         if (host) {
             return;

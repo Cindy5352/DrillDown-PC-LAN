@@ -22,7 +22,6 @@ import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.WindowedMean;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.scenes.scene2d.ui.modified.TooltipManager;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 
 import de.dakror.common.BiCallback;
@@ -35,6 +34,7 @@ import de.dakror.quarry.Quarry;
 import de.dakror.quarry.game.Item.ItemType;
 import de.dakror.quarry.game.Item.Items;
 import de.dakror.quarry.game.Science.ScienceType;
+import de.dakror.quarry.scenes.Game;
 import de.dakror.quarry.structure.base.Direction;
 import de.dakror.quarry.structure.base.Dock;
 import de.dakror.quarry.structure.base.Dock.DockType;
@@ -70,7 +70,7 @@ public class DigitalStorage extends Storage {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             DigitalStorage st = (DigitalStorage) data;
-                            TooltipManager.getInstance().enabled = !on;
+                            Game.G.ui.setTooltipsEnabled(!on);
                             st.outputSelectMode = on;
                             for (Actor a : st.ui.getChildren()) {
                                 Table t = (Table) a;
@@ -88,7 +88,7 @@ public class DigitalStorage extends Storage {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             DigitalStorage st = (DigitalStorage) data;
-                            TooltipManager.getInstance().enabled = !on;
+                            Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
                         }
                     }))

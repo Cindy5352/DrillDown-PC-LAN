@@ -16,6 +16,7 @@
 
 package de.dakror.quarry.structure.storage;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.Map;
@@ -32,7 +33,6 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.ScrollPane;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.scenes.scene2d.ui.modified.TextTooltip;
-import com.badlogic.gdx.scenes.scene2d.ui.modified.TooltipManager;
 import com.badlogic.gdx.scenes.scene2d.utils.ClickListener;
 import com.badlogic.gdx.scenes.scene2d.utils.Drawable;
 import com.badlogic.gdx.utils.Align;
@@ -85,7 +85,7 @@ public class Storage extends StorageStructure {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             Storage st = (Storage) data;
-                            TooltipManager.getInstance().enabled = !on;
+                            Game.G.ui.setTooltipsEnabled(!on);
                             st.outputSelectMode = on;
                             for (Actor a : st.ui.getChildren()) {
                                 Table t = (Table) a;
@@ -103,7 +103,7 @@ public class Storage extends StorageStructure {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             Storage st = (Storage) data;
-                            TooltipManager.getInstance().enabled = !on;
+                            Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
                         }
                     }));
@@ -287,10 +287,20 @@ public class Storage extends StorageStructure {
         pumping = outputs.size > 0;
 
         if (t != null) {
-            Drawable d = lightBg;
-            if (output)
-                d = greenBg;
-            t.setBackground(d);
+            updateOutputCellBackgrounds();
+        }
+    }
+
+    protected void updateOutputCellBackgrounds() {
+        for (Entry<ItemType, Table> e : cells.entrySet()) {
+            Table t = e.getValue();
+            if (outputs.contains(e.getKey(), true)) {
+                t.setBackground(greenBg);
+            } else if (outputSelectMode) {
+                t.setBackground(lightBg);
+            } else {
+                t.setBackground((Drawable) null);
+            }
         }
     }
 
@@ -325,6 +335,8 @@ public class Storage extends StorageStructure {
 
     @Override
     protected void loadData(CompoundTag tag) throws NBTException {
+        outputs.clear();
+        pumping = false;
         super.loadData(tag);
         isTubeAtOutput = tag.Byte("output", (byte) 0) == 1;
 
@@ -354,6 +366,8 @@ public class Storage extends StorageStructure {
 
     @Override
     protected void pasteData(int[] pasteRegion, CompoundTag tag) {
+        outputs.clear();
+        pumping = false;
         super.pasteData(pasteRegion, tag);
         isTubeAtOutput = tag.Byte("output", (byte) 0) == 1;
 
@@ -365,6 +379,41 @@ public class Storage extends StorageStructure {
                 if (t != null)
                     setOutput(t, true);
             }
+        }
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        if (ui == null) {
+            return;
+        }
+
+        CInventory inv = (CInventory) components[0];
+
+        fl.setText(inv.getCount() + " / " + inv.getSize());
+
+        for (ItemType type : new ArrayList<>(cells.keySet())) {
+            setUIAmount(type, inv.get(type));
+        }
+        for (Map.Entry<ItemType, Integer> e : inv.getAll()) {
+            setUIAmount(e.getKey(), e.getValue());
+        }
+        for (ItemType i : outputs) {
+            setUIAmount(i, inv.get(i));
+        }
+
+        updateOutputCellBackgrounds();
+
+        ui.getChildren().sort(new Comparator<Actor>() {
+            @Override
+            public int compare(Actor a, Actor b) {
+                return Integer.compare(((ItemType) a.getUserObject()).value & 0xff, ((ItemType) b.getUserObject()).value & 0xff);
+            }
+        });
+
+        if (sp != null) {
+            sp.invalidateHierarchy();
+            sp.validate();
         }
     }
 
@@ -399,30 +448,7 @@ public class Storage extends StorageStructure {
             fl.setAlignment(Align.center);
         }
 
-        sp.setScrollX(0);
-        sp.updateVisualScroll();
-        sp.invalidateHierarchy();
-        sp.validate();
-
-        CInventory inv = (CInventory) components[0];
-        fl.setText(inv.getCount() + " / " + inv.getSize());
-
-        for (Map.Entry<ItemType, Table> e : cells.entrySet()) {
-            setUIAmount(e.getKey(), ((CInventory) components[0]).get(e.getKey()));
-        }
-        for (Map.Entry<ItemType, Integer> e : ((CInventory) components[0]).getAll()) {
-            setUIAmount(e.getKey(), e.getValue());
-        }
-        for (ItemType i : outputs) {
-            setUIAmount(i, ((CInventory) components[0]).get(i));
-        }
-
-        ui.getChildren().sort(new Comparator<Actor>() {
-            @Override
-            public int compare(Actor a, Actor b) {
-                return Integer.compare(((ItemType) a.getUserObject()).value & 0xff, ((ItemType) b.getUserObject()).value & 0xff);
-            }
-        });
+        refreshUIFromState();
 
         content.add(sp).growX().top().left().expand();
         content.row();

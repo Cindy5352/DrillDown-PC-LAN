@@ -19,7 +19,6 @@ package de.dakror.quarry.structure.storage;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.scenes.scene2d.ui.Label;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
-import com.badlogic.gdx.scenes.scene2d.ui.modified.TooltipManager;
 import com.badlogic.gdx.utils.Align;
 
 import de.dakror.common.BiCallback;
@@ -71,7 +70,7 @@ public class Barrel extends StorageStructure {
                         @Override
                         public void call(Boolean on, Structure<?> data) {
                             Barrel st = (Barrel) data;
-                            TooltipManager.getInstance().enabled = !on;
+                            Game.G.ui.setTooltipsEnabled(!on);
                             st.refundStorage = on;
                         }
                     }));
@@ -188,6 +187,13 @@ public class Barrel extends StorageStructure {
         updateUI();
 
         content.add(ui).grow();
+    }
+
+    @Override
+    public void refreshUIFromState() {
+        if (ui != null) {
+            updateUI();
+        }
     }
 
     @Override

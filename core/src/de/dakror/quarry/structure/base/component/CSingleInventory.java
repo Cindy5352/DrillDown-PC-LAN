@@ -261,6 +261,9 @@ public class CSingleInventory extends Component implements IStorage {
 
     @Override
     public void loadData(CompoundTag tag) {
+        item = null;
+        count = 0;
+
         short flu = tag.Short("item", (short) 0);
         if (flu != 0) {
             item = Item.get(flu);
