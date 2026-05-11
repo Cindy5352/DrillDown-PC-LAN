@@ -2102,10 +2102,13 @@ public class Game extends GameScene {
             ListTag list = command.List("structures");
             Layer previewLayer = getLayer(previewLayerIndex);
             for (Tag t : list.data) {
-                Structure<?> s = Structure.load((CompoundTag) t);
+                // Remote placement previews must avoid the full load path, because that pulls runtime-only
+                // state such as conveyor item lists and can crash on preview-only NBT payloads.
+                Structure<?> s = Structure.loadPaste(PREVIEW_COPY_REGION, (CompoundTag) t);
                 if (s != null) {
+                    s.layer = previewLayer;
                     if (previewLayer != null) {
-                        s.layer = previewLayer;
+                        s.paste(PREVIEW_COPY_REGION, (CompoundTag) t);
                     }
                     structures.add(s);
                 }
