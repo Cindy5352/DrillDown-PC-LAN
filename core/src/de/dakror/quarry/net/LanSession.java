@@ -23,6 +23,7 @@ import de.dakror.common.libgdx.io.NBT.CompressionType;
 import de.dakror.common.libgdx.PlatformInterface;
 import de.dakror.quarry.Quarry;
 import de.dakror.quarry.scenes.Game;
+import de.dakror.quarry.util.NbtIO;
 
 public final class LanSession {
     private static final byte HELLO = 1;
@@ -314,7 +315,7 @@ public final class LanSession {
 
     private void writeCommand(Socket socket, CompoundTag command) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        NBT.write(baos, command, CompressionType.Small);
+        NbtIO.write(baos, command, CompressionType.Small);
 
         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
         out.writeByte(COMMAND);

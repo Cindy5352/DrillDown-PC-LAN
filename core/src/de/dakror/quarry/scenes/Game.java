@@ -166,6 +166,7 @@ import de.dakror.quarry.structure.storage.Tank;
 import de.dakror.quarry.net.LanSession;
 import de.dakror.quarry.net.LanSnapshot;
 import de.dakror.quarry.util.Bounds;
+import de.dakror.quarry.util.NbtIO;
 import de.dakror.quarry.util.QuarrySoundPlayer;
 import de.dakror.quarry.util.SpriterDelegateBatch;
 import de.dakror.quarry.util.StructureSoundSpatializer;
@@ -2513,8 +2514,8 @@ public class Game extends GameScene {
 
             ByteArrayOutputStream metaOut = new ByteArrayOutputStream();
             ByteArrayOutputStream dataOut = new ByteArrayOutputStream();
-            NBT.write(metaOut, meta, CompressionType.Fast);
-            NBT.write(dataOut, data, CompressionType.Fast);
+            NbtIO.write(metaOut, meta, CompressionType.Fast);
+            NbtIO.write(dataOut, data, CompressionType.Fast);
             meta.free();
             data.free();
             return new LanSnapshot(metaOut.toByteArray(), dataOut.toByteArray());
@@ -4342,7 +4343,7 @@ public class Game extends GameScene {
                 fh.copyTo(Quarry.Q.file("TheQuarry/saves/" + file + "-old.qmf", true));
             }
 
-            NBT.write(fh.write(false), meta, CompressionType.Fast);
+            NbtIO.write(fh.write(false), meta, CompressionType.Fast);
             meta.free();
 
             // Write data
@@ -4407,7 +4408,7 @@ public class Game extends GameScene {
                 fh1.copyTo(Quarry.Q.file("TheQuarry/saves/" + file + "-old.qsf", true));
             }
 
-            NBT.write(fh1.write(false), data, CompressionType.Fast);
+            NbtIO.write(fh1.write(false), data, CompressionType.Fast);
 
             //            // This is debug only and its super slow
             if (Quarry.Q.desktop && Quarry.Q.version.equals("debug"))
@@ -4467,7 +4468,7 @@ public class Game extends GameScene {
 
                 CompoundTag meta = metaBuilder.Get();
 
-                NBT.write(Quarry.Q.file("TheQuarry/saves/" + filename + ".qmf", true).write(false), meta,
+                NbtIO.write(Quarry.Q.file("TheQuarry/saves/" + filename + ".qmf", true).write(false), meta,
                         CompressionType.Fast);
 
                 return meta;
@@ -4737,7 +4738,7 @@ public class Game extends GameScene {
 
         try {
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            NBT.write(baos, b.Get(), CompressionType.Small);
+            NbtIO.write(baos, b.Get(), CompressionType.Small);
             Quarry.Q.pi.message(Const.MSG_PASTE, new String(Base64Coder.encode(baos.toByteArray())));
         } catch (IOException e) {
             e.printStackTrace();

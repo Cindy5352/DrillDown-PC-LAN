@@ -76,6 +76,8 @@ public class LoadingScreen extends Scene {
         assets.setLoader(SfxSound.class, new SfxSoundLoader(resolver));
 
         assets.load("tex.atlas", TextureAtlas.class);
+        assets.load("trashbin.png", com.badlogic.gdx.graphics.Texture.class);
+        assets.load("icon_trashbin.png", com.badlogic.gdx.graphics.Texture.class);
 
         FreeTypeFontGenerator generator = new FreeTypeFontGenerator(Gdx.files.internal("Chinese.ttf"));
         ObjectMap<String, Object> fontMap = new ObjectMap<String, Object>();
