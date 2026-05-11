@@ -272,6 +272,46 @@ public class Game extends GameScene {
 
     public class QuarryCameraControl extends EditorCameraControl {
         @Override
+        public boolean touchDown(float x, float y, int pointer, int button) {
+            initialZoom = cam.zoom;
+
+            viewport.unproject(tmp.set(x, y));
+            int tileX = (int) (tmp.x / tileSize);
+            int tileY = (int) (tmp.y / tileSize);
+
+            if (isActiveElementEnabled() && isWithinActiveElement((int) tmp.x, (int) tmp.y, tileX, tileY)) {
+                canPan = false;
+                dragX = x;
+                dragY = y;
+                setParamRawPosition(activeElementPos, (int) tmp.x, (int) tmp.y, tileX, tileY);
+                return true;
+            }
+
+            return false;
+        }
+
+        @Override
+        public boolean tap(float x, float y, int count, int button) {
+            viewport.unproject(tmp.set(x, y));
+            int tileX = (int) (tmp.x / tileSize);
+            int tileY = (int) (tmp.y / tileSize);
+
+            updateActiveElementPlaceable();
+            if (elementPlaceable && isWithinActiveElement((int) tmp.x, (int) tmp.y, tileX, tileY)
+                    && isActiveElementEnabled()) {
+                placeActiveElement();
+
+                // for a next placement
+                updateActiveElementPlaceable();
+                return true;
+            } else if (handleInitialPlacement(tileX, tileY)) {
+                setParamRawPosition(activeElementPos, (int) tmp.x, (int) tmp.y, tileX, tileY);
+                updateActiveElementPlaceable();
+                return true;
+            } else return handleTap((int) tmp.x, (int) tmp.y, tileX, tileY);
+        }
+
+        @Override
         public boolean touchUp(int screenX, int screenY, int pointer, int button) {
             activeEnd = 0;
 
@@ -1261,6 +1301,8 @@ public class Game extends GameScene {
 
         @Override
         protected void placeActiveElement() {
+            Game.this.pauseStructureStateSync();
+            try {
             if (endB.x > -1) {
                 placingTrail = true;
                 for (Structure<?> s : activeStructureTrail.values()) {
@@ -1387,6 +1429,9 @@ public class Game extends GameScene {
                         activeStructure.y = 0;
                     }
                 }
+            }
+            } finally {
+                Game.this.resumeStructureStateSync();
             }
         }
 
@@ -1562,6 +1607,7 @@ public class Game extends GameScene {
     private boolean remoteCursorDebugProjectLogged;
     private boolean localCursorDebugSendLogged;
     private long localPlacementPreviewSignature = Long.MIN_VALUE;
+    private int structureStateSyncPauseDepth = 0;
     public final PowerGrid powerGrid = new PowerGrid();
     AStar<Integer> tilePathfinding;
     Network<Integer> tileNetwork = new AStar.Network<Integer>() {
@@ -2038,6 +2084,34 @@ public class Game extends GameScene {
         }
     }
 
+    public void pauseStructureStateSync() {
+        structureStateSyncPauseDepth++;
+    }
+
+    public void resumeStructureStateSync() {
+        if (structureStateSyncPauseDepth > 0) {
+            structureStateSyncPauseDepth--;
+        }
+    }
+
+    public boolean canSyncStructureState() {
+        return lanSession != null && !lanApplyingCommand && structureStateSyncPauseDepth == 0;
+    }
+
+    public void emitLanSetRotation(Structure<?> structure, Direction direction) {
+        if (!canSyncStructureState() || structure == null || structure.layer == null || direction == null) {
+            return;
+        }
+
+        NBT.Builder cmd = new NBT.Builder("Command")
+                .String("kind", "set_rotation")
+                .Int("layer", structure.layer.getIndex())
+                .Int("x", structure.x)
+                .Int("y", structure.y)
+                .Int("dir", direction.ordinal());
+        emitLanCommand(cmd.Get());
+    }
+
     public void applyLanCommand(CompoundTag command) {
         String kind = command.String("kind", "");
         boolean old = lanApplyingCommand;
@@ -2062,6 +2136,8 @@ public class Game extends GameScene {
                 applyLanCursor(command);
             } else if ("build_preview".equals(kind)) {
                 applyLanPlacementPreview(command);
+            } else if ("set_rotation".equals(kind)) {
+                applyLanSetRotation(command);
             }
         } finally {
             lanApplyingCommand = old;
@@ -2178,6 +2254,27 @@ public class Game extends GameScene {
         Structure<?> s = targetLayer.getStructure(x, y);
         if (s instanceof IFlippable) {
             ((IFlippable) s).flip();
+            camControl.updateActiveElementPlaceable();
+        }
+    }
+
+    protected void applyLanSetRotation(CompoundTag command) {
+        Layer targetLayer = getLayer(command.Int("layer", layerIndex));
+        if (targetLayer == null) {
+            return;
+        }
+        int x = command.Int("x", -1);
+        int y = command.Int("y", -1);
+        if (x < 0 || y < 0) return;
+
+        int dirIndex = command.Int("dir", -1);
+        if (dirIndex < 0 || dirIndex >= Direction.values.length) {
+            return;
+        }
+
+        Structure<?> s = targetLayer.getStructure(x, y);
+        if (s instanceof IRotatable) {
+            ((IRotatable) s).setRotation(Direction.values[dirIndex]);
             camControl.updateActiveElementPlaceable();
         }
     }
@@ -4912,8 +5009,8 @@ public class Game extends GameScene {
     }
 
     private void updateLocalPointerState(int screenX, int screenY) {
-        // Gdx.input uses a top-left origin, while unproject expects bottom-left screen coordinates.
-        viewport.unproject(tmp.set(screenX, Gdx.graphics.getHeight() - screenY));
+        // Viewport.unproject already expects screen-space input coordinates.
+        viewport.unproject(tmp.set(screenX, screenY));
         hoverTileX = (int) (tmp.x / Const.TILE_SIZE);
         hoverTileY = (int) (tmp.y / Const.TILE_SIZE);
     }

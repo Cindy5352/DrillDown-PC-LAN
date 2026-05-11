@@ -646,93 +646,103 @@ public class GameUi implements Ui {
     }
 
     public void rotateActiveStructure() {
-        Structure<?> syncTarget = null;
-        boolean sync = false;
-        if (tooltipCurrentStructure != null) {
-            if (tooltipCurrentStructure instanceof IRotatable) {
-                if (!Game.G.activeStructureTrail.isEmpty() && Game.G.endB.x > -1) {
-                    int tx = (int) Game.G.endA.x, ty = (int) Game.G.endA.y;
-                    Game.G.endA.set(Game.G.endB);
-                    Game.G.endB.set(tx, ty);
+        Game.G.pauseStructureStateSync();
+        try {
+            Structure<?> syncTarget = null;
+            boolean sync = false;
+            if (tooltipCurrentStructure != null) {
+                if (tooltipCurrentStructure instanceof IRotatable) {
+                    if (!Game.G.activeStructureTrail.isEmpty() && Game.G.endB.x > -1) {
+                        int tx = (int) Game.G.endA.x, ty = (int) Game.G.endA.y;
+                        Game.G.endA.set(Game.G.endB);
+                        Game.G.endB.set(tx, ty);
 
-                    Structure<?> last = null;
-                    Collections.reverse(Game.G.activeStructurePath);
-                    for (int i : Game.G.activeStructurePath) {
-                        Structure<?> s = Game.G.activeStructureTrail.get(i);
-                        if (last != null) {
-                            Direction rotation = null;
-                            if (s.x == last.x) {
-                                rotation = s.y > last.y ? Direction.South : Direction.North;
+                        Structure<?> last = null;
+                        Collections.reverse(Game.G.activeStructurePath);
+                        for (int i : Game.G.activeStructurePath) {
+                            Structure<?> s = Game.G.activeStructureTrail.get(i);
+                            if (last != null) {
+                                Direction rotation = null;
+                                if (s.x == last.x) {
+                                    rotation = s.y > last.y ? Direction.South : Direction.North;
+                                } else {
+                                    rotation = s.x > last.x ? Direction.West : Direction.East;
+                                }
+
+                                ((IRotatable) s).setRotation(rotation);
                             } else {
-                                rotation = s.x > last.x ? Direction.West : Direction.East;
+                                ((IRotatable) s).setRotation(((IRotatable) s).getDirection().inv());
                             }
-
-                            ((IRotatable) s).setRotation(rotation);
-                        } else {
-                            ((IRotatable) s).setRotation(((IRotatable) s).getDirection().inv());
+                            last = s;
                         }
-                        last = s;
-                    }
 
-                    // apply updates after all rotations done
-                    for (int i : Game.G.activeStructurePath) {
-                        Structure<?> s = Game.G.activeStructureTrail.get(i);
-                        s.update(0, 1, Game.G.layer.dirtyBounds);
-                    }
+                        // apply updates after all rotations done
+                        for (int i : Game.G.activeStructurePath) {
+                            Structure<?> s = Game.G.activeStructureTrail.get(i);
+                            s.update(0, 1, Game.G.layer.dirtyBounds);
+                        }
 
-                    Game.G.camControl.updateTrail();
-                } else {
-                    ((IRotatable) tooltipCurrentStructure).rotate();
+                        Game.G.camControl.updateTrail();
+                    } else {
+                        ((IRotatable) tooltipCurrentStructure).rotate();
+                        syncTarget = tooltipCurrentStructure;
+                        sync = true;
+                    }
+                } else if (!tooltipCurrentStructure.getSchema().has(Flags.NotRotatable)) {
+                    tooltipCurrentStructure.setUpDirection(tooltipCurrentStructure.getUpDirection().next());
                     syncTarget = tooltipCurrentStructure;
                     sync = true;
                 }
-            } else if (!tooltipCurrentStructure.getSchema().has(Flags.NotRotatable)) {
-                tooltipCurrentStructure.setUpDirection(tooltipCurrentStructure.getUpDirection().next());
-                syncTarget = tooltipCurrentStructure;
+                Game.G.camControl.updateActiveElementPlaceable();
+            } else if (currentClickedStructure instanceof IRotatable) {
+                ((IRotatable) currentClickedStructure).rotate();
+                syncTarget = currentClickedStructure;
                 sync = true;
             }
-            Game.G.camControl.updateActiveElementPlaceable();
-        } else if (currentClickedStructure instanceof IRotatable) {
-            ((IRotatable) currentClickedStructure).rotate();
-            syncTarget = currentClickedStructure;
-            sync = true;
-        }
 
-        if (sync && syncTarget != null && Game.G.lanSession != null && !Game.G.activeStructureTrail.isEmpty()) {
-            sync = false;
-        }
-        if (sync && syncTarget != null && Game.G.lanSession != null) {
-            NBT.Builder cmd = new NBT.Builder("Command")
-                    .String("kind", "rotate")
-                    .Int("x", syncTarget.x)
-                    .Int("y", syncTarget.y)
-                    .Int("layer", Game.G.layerIndex);
-            Game.G.emitLanCommand(cmd.Get());
+            if (sync && syncTarget != null && Game.G.lanSession != null && !Game.G.activeStructureTrail.isEmpty()) {
+                sync = false;
+            }
+            if (sync && syncTarget != null && Game.G.lanSession != null) {
+                NBT.Builder cmd = new NBT.Builder("Command")
+                        .String("kind", "rotate")
+                        .Int("x", syncTarget.x)
+                        .Int("y", syncTarget.y)
+                        .Int("layer", Game.G.layerIndex);
+                Game.G.emitLanCommand(cmd.Get());
+            }
+        } finally {
+            Game.G.resumeStructureStateSync();
         }
     }
 
     public void flipActiveStructure() {
-        Structure<?> syncTarget = null;
-        if (tooltipCurrentStructure instanceof IFlippable) {
-            ((IFlippable) tooltipCurrentStructure).flip();
-            Game.G.camControl.updateActiveElementPlaceable();
-            for (Structure<?> s : Game.G.activeStructureTrail.values())
-                ((IFlippable) s).flip();
-            if (Game.G.activeStructureTrail.isEmpty()) {
-                syncTarget = tooltipCurrentStructure;
+        Game.G.pauseStructureStateSync();
+        try {
+            Structure<?> syncTarget = null;
+            if (tooltipCurrentStructure instanceof IFlippable) {
+                ((IFlippable) tooltipCurrentStructure).flip();
+                Game.G.camControl.updateActiveElementPlaceable();
+                for (Structure<?> s : Game.G.activeStructureTrail.values())
+                    ((IFlippable) s).flip();
+                if (Game.G.activeStructureTrail.isEmpty()) {
+                    syncTarget = tooltipCurrentStructure;
+                }
+            } else if (currentClickedStructure instanceof IFlippable) {
+                ((IFlippable) currentClickedStructure).flip();
+                syncTarget = currentClickedStructure;
             }
-        } else if (currentClickedStructure instanceof IFlippable) {
-            ((IFlippable) currentClickedStructure).flip();
-            syncTarget = currentClickedStructure;
-        }
 
-        if (syncTarget != null && Game.G.lanSession != null) {
-            NBT.Builder cmd = new NBT.Builder("Command")
-                    .String("kind", "flip")
-                    .Int("x", syncTarget.x)
-                    .Int("y", syncTarget.y)
-                    .Int("layer", Game.G.layerIndex);
-            Game.G.emitLanCommand(cmd.Get());
+            if (syncTarget != null && Game.G.lanSession != null) {
+                NBT.Builder cmd = new NBT.Builder("Command")
+                        .String("kind", "flip")
+                        .Int("x", syncTarget.x)
+                        .Int("y", syncTarget.y)
+                        .Int("layer", Game.G.layerIndex);
+                Game.G.emitLanCommand(cmd.Get());
+            }
+        } finally {
+            Game.G.resumeStructureStateSync();
         }
     }
 

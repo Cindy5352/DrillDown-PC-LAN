@@ -655,10 +655,15 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
 
     @Override
     public void setRotation(Direction direction) {
+        Direction previous = dir;
         dir = direction;
 
         if (layer == null) updateStructures();
         else setDirty();
+
+        if (previous != direction && Game.G != null) {
+            Game.G.emitLanSetRotation(this, direction);
+        }
     }
 
     @Override
