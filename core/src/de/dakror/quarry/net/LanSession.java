@@ -43,6 +43,7 @@ public final class LanSession {
     private Thread acceptThread;
     private Thread readThread;
     private Callback<Object> loadCallback;
+    private volatile boolean cursorCommandDebugLogged;
 
     private LanSession(Game game, boolean host) {
         this.game = game;
@@ -191,7 +192,6 @@ public final class LanSession {
                     int len = in.readInt();
                     byte[] payload = new byte[len];
                     in.readFully(payload);
-                    System.out.println("lan client recv command from=" + from + " bytes=" + len);
                     applyCommand(payload, from);
                 }
             }
@@ -245,7 +245,22 @@ public final class LanSession {
         try {
             CompoundTag tag = NBT.read(new ByteArrayInputStream(payload), CompressionType.Small);
             if (!tag.has("client")) {
-                tag.Long("client", fromClientId);
+                tag.add(new NBT.LongTag("client", fromClientId));
+            }
+            String kind = tag.String("kind", "");
+            if ("cursor".equals(kind)) {
+                if (!cursorCommandDebugLogged) {
+                    cursorCommandDebugLogged = true;
+                    System.out.println("lan cursor recv host=" + host + " fromPacket=" + fromClientId
+                            + " client=" + tag.Long("client", -1) + " layer=" + tag.Int("layer", -1)
+                            + " sx=" + tag.Int("sx", -1) + " sy=" + tag.Int("sy", -1)
+                            + " wx=" + tag.Float("wx", -1f) + " wy=" + tag.Float("wy", -1f));
+                }
+                game.applyLanCursor(tag);
+                if (host) {
+                    broadcastCommand(tag, fromClientId);
+                }
+                return;
             }
             Gdx.app.postRunnable(new Runnable() {
                 @Override
@@ -309,7 +324,6 @@ public final class LanSession {
                             int len = in.readInt();
                             byte[] payload = new byte[len];
                             in.readFully(payload);
-                            System.out.println("lan host recv command from=" + from + " bytes=" + len);
                             applyCommand(payload, from);
                             if (!host) {
                                 // no-op

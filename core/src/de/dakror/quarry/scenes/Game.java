@@ -186,6 +186,8 @@ public class Game extends GameScene {
         public int layer;
         public int tileX;
         public int tileY;
+        public float worldX;
+        public float worldY;
         public int screenX;
         public int screenY;
         public float normX;
@@ -206,10 +208,13 @@ public class Game extends GameScene {
             b = 0.35f + ((hash >> 16) & 0x7f) / 255f * 0.65f;
         }
 
-        void update(int layer, int tileX, int tileY, int screenX, int screenY, float normX, float normY) {
+        void update(int layer, int tileX, int tileY, int screenX, int screenY, float worldX, float worldY, float normX,
+                float normY) {
             this.layer = layer;
             this.tileX = tileX;
             this.tileY = tileY;
+            this.worldX = worldX;
+            this.worldY = worldY;
             this.screenX = screenX;
             this.screenY = screenY;
             this.normX = normX;
@@ -217,9 +222,11 @@ public class Game extends GameScene {
             this.lastSeenMs = System.currentTimeMillis();
         }
 
-        void advance(float delta, int width, int height) {
-            float targetX = normX >= 0f ? normX * width : screenX;
-            float targetY = normY >= 0f ? normY * height : screenY;
+        void advance(float delta) {
+            float targetX = worldX >= 0f ? worldX
+                    : (tileX >= 0 ? tileX * Const.TILE_SIZE + Const.TILE_SIZE * 0.5f : screenX);
+            float targetY = worldY >= 0f ? worldY
+                    : (tileY >= 0 ? tileY * Const.TILE_SIZE + Const.TILE_SIZE * 0.5f : screenY);
             if (!renderInitialized) {
                 renderX = targetX;
                 renderY = targetY;
@@ -1507,11 +1514,18 @@ public class Game extends GameScene {
     private int localCursorTileY = Integer.MIN_VALUE;
     private int localCursorScreenX = Integer.MIN_VALUE;
     private int localCursorScreenY = Integer.MIN_VALUE;
+    private float localCursorWorldX = Float.NaN;
+    private float localCursorWorldY = Float.NaN;
     private boolean localCursorVisible;
     private final Object remoteCursorLock = new Object();
     private final HashMap<Long, RemoteCursorState> remoteCursors = new HashMap<>();
     private final Matrix4 screenProjection = new Matrix4();
-    private Texture remoteCursorTexture;
+    private TextureRegion remoteCursorTexture;
+    private boolean remoteCursorDebugUpdateLogged;
+    private boolean remoteCursorDebugDrawLogged;
+    private boolean remoteCursorDebugFilterLogged;
+    private boolean remoteCursorDebugOverlayLogged;
+    private boolean localCursorDebugSendLogged;
     public final PowerGrid powerGrid = new PowerGrid();
     AStar<Integer> tilePathfinding;
     Network<Integer> tileNetwork = new AStar.Network<Integer>() {
@@ -1711,7 +1725,7 @@ public class Game extends GameScene {
 
         batch = new SpriteBatch(8191, colorShader);
         remoteCursorBatch = new SpriteBatch(1);
-        remoteCursorTexture = createRemoteCursorTexture();
+        remoteCursorTexture = Quarry.Q.mouseTex;
 
         cam = new OrthographicCamera();
         shaper = new ShapeRenderer();
@@ -2012,18 +2026,15 @@ public class Game extends GameScene {
         }
     }
 
-    protected void applyLanCursor(CompoundTag command) {
+    public void applyLanCursor(CompoundTag command) {
         long clientId = command.Long("client", -1);
         if (clientId < 0) {
             return;
         }
 
-        System.out.println("recv cursor " + clientId + " " + command.Int("layer", layerIndex) + " "
-                + command.Int("x", -1) + " " + command.Int("y", -1) + " "
-                + command.Int("sx", -1) + " " + command.Int("sy", -1));
         updateRemoteCursor(clientId, command.Int("layer", layerIndex), command.Int("x", -1),
-                command.Int("y", -1), command.Int("sx", -1), command.Int("sy", -1),
-                command.Float("nx", -1f), command.Float("ny", -1f));
+                command.Int("y", -1), command.Int("sx", -1), command.Int("sy", -1), command.Float("wx", -1f),
+                command.Float("wy", -1f), command.Float("nx", -1f), command.Float("ny", -1f));
     }
 
     protected void applyLanBuildBatch(CompoundTag command) {
@@ -3195,7 +3206,6 @@ public class Game extends GameScene {
         shaper.end();*/
 
         ui.draw();
-        drawRemoteCursors();
 
         if (deltaLayer != 0) {
             synchronized (layerLock) {
@@ -3237,6 +3247,10 @@ public class Game extends GameScene {
         if (cursors.isEmpty()) {
             return;
         }
+        if (!remoteCursorDebugDrawLogged) {
+            remoteCursorDebugDrawLogged = true;
+            System.out.println("remote cursor draw snapshot count=" + cursors.size() + " layer=" + layerIndex);
+        }
 
         if (remoteCursorTexture == null) {
             return;
@@ -3252,79 +3266,35 @@ public class Game extends GameScene {
                 continue;
             }
             if (cursor.layer != layerIndex) {
+                if (!remoteCursorDebugFilterLogged) {
+                    remoteCursorDebugFilterLogged = true;
+                    System.out.println("remote cursor filtered by layer cursorLayer=" + cursor.layer
+                            + " currentLayer=" + layerIndex + " client=" + cursor.clientId);
+                }
                 continue;
             }
-            if (cursor.screenX < 0 || cursor.screenY < 0) {
+            if (cursor.worldX < 0f || cursor.worldY < 0f) {
                 continue;
             }
 
-            cursor.advance(delta, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-            float size = 24f;
-            System.out.println("draw cursor " + cursor.clientId + " layer=" + cursor.layer + " x=" + cursor.renderX + " y=" + cursor.renderY);
+            cursor.advance(delta);
+            tmp3.set(cursor.renderX, cursor.renderY, 0f);
+            viewport.project(tmp3);
             remoteCursorBatch.setColor(cursor.r, cursor.g, cursor.b, 0.95f);
-            remoteCursorBatch.draw(remoteCursorTexture, cursor.renderX, Gdx.graphics.getHeight() - cursor.renderY - size,
-                    size, size);
+            remoteCursorBatch.draw(remoteCursorTexture, tmp3.x, tmp3.y - remoteCursorTexture.getRegionHeight(),
+                    remoteCursorTexture.getRegionWidth(), remoteCursorTexture.getRegionHeight());
         }
         remoteCursorBatch.setColor(1f, 1f, 1f, 1f);
         remoteCursorBatch.end();
         Gdx.gl.glDisable(GL20.GL_BLEND);
     }
 
-    private Texture createRemoteCursorTexture() {
-        Pixmap pixmap = new Pixmap(24, 24, Pixmap.Format.RGBA8888);
-        try {
-            pixmap.setBlending(Pixmap.Blending.None);
-            pixmap.setColor(0f, 0f, 0f, 0f);
-            pixmap.fill();
-
-            fillTriangle(pixmap, 3, 2, 3, 21, 18, 11, 0f, 0f, 0f, 0.95f);
-            fillTriangle(pixmap, 5, 4, 5, 18, 15, 11, 1f, 1f, 1f, 1f);
-            pixmap.setColor(0f, 0f, 0f, 0.95f);
-            pixmap.fillRectangle(4, 17, 5, 5);
-            pixmap.setColor(1f, 1f, 1f, 1f);
-            pixmap.fillRectangle(5, 18, 3, 3);
-
-            Texture texture = new Texture(pixmap);
-            texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            return texture;
-        } finally {
-            pixmap.dispose();
+    public void drawOverlay() {
+        if (!remoteCursorDebugOverlayLogged) {
+            remoteCursorDebugOverlayLogged = true;
+            System.out.println("remote cursor overlay entered layer=" + layerIndex + " lan=" + (lanSession != null));
         }
-    }
-
-    private void fillTriangle(Pixmap pixmap, int ax, int ay, int bx, int by, int cx, int cy, float r, float g, float b, float a) {
-        pixmap.setColor(r, g, b, a);
-        int minX = Math.min(ax, Math.min(bx, cx));
-        int maxX = Math.max(ax, Math.max(bx, cx));
-        int minY = Math.min(ay, Math.min(by, cy));
-        int maxY = Math.max(ay, Math.max(by, cy));
-        for (int y = minY; y <= maxY; y++) {
-            for (int x = minX; x <= maxX; x++) {
-                if (pointInTriangle(x + 0.5f, y + 0.5f, ax, ay, bx, by, cx, cy)) {
-                    pixmap.drawPixel(x, y);
-                }
-            }
-        }
-    }
-
-    private boolean pointInTriangle(float px, float py, float ax, float ay, float bx, float by, float cx, float cy) {
-        float v0x = cx - ax;
-        float v0y = cy - ay;
-        float v1x = bx - ax;
-        float v1y = by - ay;
-        float v2x = px - ax;
-        float v2y = py - ay;
-
-        float dot00 = v0x * v0x + v0y * v0y;
-        float dot01 = v0x * v1x + v0y * v1y;
-        float dot02 = v0x * v2x + v0y * v2y;
-        float dot11 = v1x * v1x + v1y * v1y;
-        float dot12 = v1x * v2x + v1y * v2y;
-
-        float invDenom = 1f / (dot00 * dot11 - dot01 * dot01);
-        float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
-        float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
-        return u >= 0f && v >= 0f && u + v <= 1f;
+        drawRemoteCursors();
     }
 
     public void drawStructureAssists(Structure<?> structure, Recipe activeRecipe) {
@@ -4345,7 +4315,6 @@ public class Game extends GameScene {
 
         batch.dispose();
         remoteCursorBatch.dispose();
-        remoteCursorTexture.dispose();
         synchronized (layerLock) {
             if (layers.size > 0) {
                 for (Layer l : layers)
@@ -4683,15 +4652,22 @@ public class Game extends GameScene {
         int screenX = Gdx.input.getX();
         int screenY = Gdx.input.getY();
         updateLocalPointerState(screenX, screenY);
+        float worldX = tmp.x;
+        float worldY = tmp.y;
 
         boolean visible = hoverTileX >= 0 && hoverTileX < layer.width && hoverTileY >= 0
                 && hoverTileY < layer.height;
         int tileX = visible ? hoverTileX : -1;
         int tileY = visible ? hoverTileY : -1;
+        if (!visible) {
+            worldX = -1f;
+            worldY = -1f;
+        }
 
         boolean changed = visible != localCursorVisible || layerIndex != localCursorLayer
                 || tileX != localCursorTileX || tileY != localCursorTileY
-                || screenX != localCursorScreenX || screenY != localCursorScreenY;
+                || screenX != localCursorScreenX || screenY != localCursorScreenY
+                || Float.compare(worldX, localCursorWorldX) != 0 || Float.compare(worldY, localCursorWorldY) != 0;
         if (!changed && localCursorSyncAcc < 0.1f) {
             return;
         }
@@ -4703,6 +4679,8 @@ public class Game extends GameScene {
         localCursorTileY = tileY;
         localCursorScreenX = screenX;
         localCursorScreenY = screenY;
+        localCursorWorldX = worldX;
+        localCursorWorldY = worldY;
 
         NBT.Builder cmd = new NBT.Builder("Command")
                 .String("kind", "cursor")
@@ -4711,21 +4689,35 @@ public class Game extends GameScene {
                 .Int("y", tileY)
                 .Int("sx", screenX)
                 .Int("sy", screenY)
+                .Float("wx", worldX)
+                .Float("wy", worldY)
                 .Float("nx", screenX / (float) Math.max(1, Gdx.graphics.getWidth()))
                 .Float("ny", screenY / (float) Math.max(1, Gdx.graphics.getHeight()));
-        System.out.println("send cursor " + layerIndex + " " + tileX + " " + tileY + " " + screenX + " " + screenY);
+        if (!localCursorDebugSendLogged) {
+            localCursorDebugSendLogged = true;
+            System.out.println("local cursor send client=" + lanSession.getLocalClientId()
+                    + " layer=" + layerIndex + " x=" + tileX + " y=" + tileY
+                    + " sx=" + screenX + " sy=" + screenY + " wx=" + worldX + " wy=" + worldY);
+        }
         emitLanCommand(cmd.Get());
     }
 
     private void updateRemoteCursor(long clientId, int cursorLayer, int tileX, int tileY, int screenX, int screenY,
-            float normX, float normY) {
+            float worldX, float worldY, float normX, float normY) {
         synchronized (remoteCursorLock) {
             RemoteCursorState cursor = remoteCursors.get(clientId);
             if (cursor == null) {
                 cursor = new RemoteCursorState(clientId);
                 remoteCursors.put(clientId, cursor);
             }
-            cursor.update(cursorLayer, tileX, tileY, screenX, screenY, normX, normY);
+            cursor.update(cursorLayer, tileX, tileY, screenX, screenY, worldX, worldY, normX, normY);
+            if (!remoteCursorDebugUpdateLogged) {
+                remoteCursorDebugUpdateLogged = true;
+                System.out.println("remote cursor updated client=" + clientId + " layer=" + cursorLayer
+                        + " sx=" + screenX + " sy=" + screenY + " wx=" + worldX + " wy=" + worldY
+                        + " nx=" + normX + " ny=" + normY
+                        + " count=" + remoteCursors.size());
+            }
         }
     }
 
