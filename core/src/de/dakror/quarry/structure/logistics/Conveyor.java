@@ -239,6 +239,13 @@ public class Conveyor extends Structure<ConveyorSchema> implements IRotatable, I
     }
 
     public void updateItems(double deltaTime, int gameSpeed, boolean touch, boolean chain) {
+        // LAN clients are host-authoritative for conveyor motion.
+        // They only render the replicated item state from structure sync,
+        // otherwise local simulation fights the host snapshot and causes jitter.
+        if (Game.G.lanSession != null && Game.G.lanSession.isClient()) {
+            return;
+        }
+
         if (!itemChanges && !touch && !notification) {
             return;
         }

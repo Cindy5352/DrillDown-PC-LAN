@@ -2,10 +2,12 @@ package de.dakror.quarry.structure.storage;
 
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
+import de.dakror.common.libgdx.render.BatchDelegate;
 import de.dakror.common.libgdx.io.NBT.Builder;
 import de.dakror.common.libgdx.io.NBT.CompoundTag;
 import de.dakror.common.libgdx.io.NBT.NBTException;
 import de.dakror.common.libgdx.render.SpriteRenderer;
+import de.dakror.quarry.Const;
 import de.dakror.quarry.Quarry;
 import de.dakror.quarry.game.Item.ItemCategory;
 import de.dakror.quarry.game.Item.ItemType;
@@ -21,13 +23,11 @@ import de.dakror.quarry.util.SpriterDelegateBatch;
 
 public class TrashBin extends Structure<Schema> {
     static final TextureRegion trashTex = new TextureRegion(Quarry.Q.assets.get("trashbin.png", com.badlogic.gdx.graphics.Texture.class));
+    static final TextureRegion atlasFallbackTex = Quarry.Q.atlas.findRegion("symb_trash");
 
     public static final Schema classSchema = new Schema(0, StructureType.TrashBin, true, 1, 1, "trashbin",
-            new Items(ItemType.Stone, 20), null,
-            new Dock(0, 0, Direction.North, DockType.ItemIn),
-            new Dock(0, 0, Direction.East, DockType.ItemIn),
-            new Dock(0, 0, Direction.South, DockType.ItemIn),
-            new Dock(0, 0, Direction.West, DockType.ItemIn))
+            new Items(ItemType.Stone, 5), null,
+            new Dock(0, 0, Direction.North, DockType.ItemIn))
                     .flags(Flags.ConfirmDestruction);
 
     public TrashBin(int x, int y) {
@@ -51,11 +51,10 @@ public class TrashBin extends Structure<Schema> {
 
     @Override
     public void draw(SpriteRenderer spriter) {
-        for (Dock d : getDocks())
-            if (d.type.tex != null)
-                spriter.add(d.type.tex, (x + d.x) * 64, (y + d.y) * 64, 0.1f, 20, 6, 40, 13, 1, 1, d.dir.ordinal() * -90);
-
-        spriter.add(trashTex, x * 64, y * 64, 0.2f, 32, 32, 64, 64, 1, 1, 0);
+        drawDocks(spriter);
+        TextureRegion region = spriter instanceof BatchDelegate || atlasFallbackTex == null ? trashTex : atlasFallbackTex;
+        spriter.add(region, x * Const.TILE_SIZE, y * Const.TILE_SIZE, Const.Z_STRUCTURES,
+                Const.TILE_SIZE / 2f, Const.TILE_SIZE / 2f, Const.TILE_SIZE, Const.TILE_SIZE, 1, 1, 0);
     }
 
     @Override

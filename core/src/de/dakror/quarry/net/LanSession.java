@@ -128,7 +128,11 @@ public final class LanSession {
                 }
 
                 try {
-                    writeCommand(c.socket, command);
+                    synchronized (c) {
+                        if (c.running) {
+                            writeCommand(c.socket, command);
+                        }
+                    }
                 } catch (IOException e) {
                     c.close();
                     it.remove();
@@ -254,6 +258,11 @@ public final class LanSession {
     private void applyCommand(byte[] payload, long fromClientId) {
         try {
             CompoundTag tag = NBT.read(new ByteArrayInputStream(payload), CompressionType.Small);
+            if (tag == null) {
+                System.out.println("lan command decode returned null payloadLen=" + (payload == null ? -1 : payload.length)
+                        + " from=" + fromClientId);
+                return;
+            }
             if (!tag.has("client")) {
                 tag.add(new NBT.LongTag("client", fromClientId));
             }
