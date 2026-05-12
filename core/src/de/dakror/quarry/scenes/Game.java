@@ -242,8 +242,14 @@ public class Game extends GameScene {
 
     }
 
+    public enum RemotePreviewType {
+        BUILD,
+        DESTROY
+    }
+
     public static final class RemotePlacementPreviewState {
         public final long clientId;
+        public final RemotePreviewType previewType;
         public final int layer;
         public final boolean visible;
         public final boolean placeable;
@@ -255,9 +261,11 @@ public class Game extends GameScene {
         public final int activeEnd;
         public final List<Structure<?>> structures;
 
-        RemotePlacementPreviewState(long clientId, int layer, boolean visible, boolean placeable, boolean canAfford,
-                int endAx, int endAy, int endBx, int endBy, int activeEnd, List<Structure<?>> structures) {
+        RemotePlacementPreviewState(long clientId, RemotePreviewType previewType, int layer, boolean visible,
+                boolean placeable, boolean canAfford, int endAx, int endAy, int endBx, int endBy, int activeEnd,
+                List<Structure<?>> structures) {
             this.clientId = clientId;
+            this.previewType = previewType;
             this.layer = layer;
             this.visible = visible;
             this.placeable = placeable;
@@ -2270,6 +2278,16 @@ public class Game extends GameScene {
             return;
         }
 
+        RemotePreviewType previewType = RemotePreviewType.BUILD;
+        String previewTypeName = command.String("previewType", "");
+        if (!previewTypeName.isEmpty()) {
+            try {
+                previewType = RemotePreviewType.valueOf(previewTypeName);
+            } catch (IllegalArgumentException ignored) {
+            }
+        } else if ("destroy_preview".equals(command.String("kind", "build_preview"))) {
+            previewType = RemotePreviewType.DESTROY;
+        }
         boolean visible = command.Byte("visible", (byte) 0) == 1;
         if (!visible) {
             removeRemotePlacementPreview(clientId);
@@ -2310,8 +2328,8 @@ public class Game extends GameScene {
             return;
         }
 
-        updateRemotePlacementPreview(clientId, previewLayerIndex, true, placeable, canAfford, endAx, endAy, endBx, endBy,
-                activeEnd, structures);
+        updateRemotePlacementPreview(clientId, previewType, previewLayerIndex, true, placeable, canAfford, endAx, endAy,
+                endBx, endBy, activeEnd, structures);
     }
 
     protected void applyLanBuildBatch(CompoundTag command) {
@@ -3698,9 +3716,12 @@ public class Game extends GameScene {
 
             drewPreview = true;
             boolean placeable = preview.placeable && preview.canAfford;
+            boolean destroyPreview = preview.previewType == RemotePreviewType.DESTROY;
 
             if (preview.endBx > -1) {
-                if (placeable) {
+                if (destroyPreview) {
+                    batch.setColor(0.8f, 0.1f, 0.1f, 1f);
+                } else if (placeable) {
                     batch.setColor(0.1f, 0.8f, 0.1f, 1f);
                 } else {
                     batch.setColor(0.8f, 0.1f, 0.1f, 1f);
@@ -3722,7 +3743,9 @@ public class Game extends GameScene {
                     drewLines = true;
                 }
             } else {
-                if (placeable) {
+                if (destroyPreview) {
+                    batch.setColor(1f, 0.5f, 0.5f, 1f);
+                } else if (placeable) {
                     batch.setColor(0.75f, 1f, 0.5f, 1f);
                 } else {
                     batch.setColor(1f, 0.5f, 0.5f, 1f);
@@ -3732,8 +3755,32 @@ public class Game extends GameScene {
                     s.draw(delegate);
                 }
 
-                if (preview.endAx > -1) {
-                    if (placeable) {
+                if (destroyPreview && preview.structures.isEmpty() && preview.endAx > -1) {
+                    float factorA = (preview.activeEnd == 1 ? 1.35f : 1f);
+                    float widthA = endMarkerA.getRegionWidth() * factorA;
+                    float heightA = endMarkerA.getRegionHeight() * factorA;
+                    batch.setColor(0.8f, 0.1f, 0.1f, 0.5f);
+                    shaper.setColor(0.8f, 0.1f, 0.1f, 0.3f);
+                    Gdx.gl.glEnable(GL20.GL_BLEND);
+                    batch.end();
+                    shaper.setProjectionMatrix(cam.combined);
+                    shaper.begin(ShapeType.Filled);
+                    Gdx.gl.glEnable(GL20.GL_BLEND);
+                    shaper.rect(preview.endAx * Const.TILE_SIZE, preview.endAy * Const.TILE_SIZE, Const.TILE_SIZE,
+                            Const.TILE_SIZE);
+                    shaper.end();
+                    batch.begin();
+
+                    batch.setColor(1f, 1f, 1f, 1f);
+                    batch.draw(endMarkerGlow, (preview.endAx + 0.5f) * Const.TILE_SIZE
+                            - endMarkerA.getRegionWidth() / 2,
+                            (preview.endAy + 0.2f) * Const.TILE_SIZE);
+                    batch.draw(endMarkerA, (preview.endAx + 0.5f) * Const.TILE_SIZE - widthA / 2,
+                            (preview.endAy + 0.2f * 1 / factorA) * Const.TILE_SIZE, widthA, heightA);
+                } else if (preview.endAx > -1) {
+                    if (destroyPreview) {
+                        batch.setColor(0.8f, 0.1f, 0.1f, 1f);
+                    } else if (placeable) {
                         batch.setColor(0.1f, 0.8f, 0.1f, 1f);
                     } else {
                         batch.setColor(0.8f, 0.1f, 0.1f, 1f);
@@ -3766,18 +3813,19 @@ public class Game extends GameScene {
                 }
 
                 boolean placeable = preview.placeable && preview.canAfford;
-                if (placeable) {
-                    shaper.setColor(0.1f, 0.8f, 0.1f, 0.75f);
-                } else {
+                boolean destroyPreview = preview.previewType == RemotePreviewType.DESTROY;
+                if (destroyPreview || !placeable) {
                     shaper.setColor(0.8f, 0.1f, 0.1f, 0.75f);
+                } else {
+                    shaper.setColor(0.1f, 0.8f, 0.1f, 0.75f);
                 }
                 shaper.rectLine((preview.endAx + 0.5f) * Const.TILE_SIZE, (preview.endAy + 0.5f) * Const.TILE_SIZE,
                         (preview.endBx + 0.5f) * Const.TILE_SIZE, (preview.endBy + 0.5f) * Const.TILE_SIZE, 6);
 
-                if (placeable) {
-                    shaper.setColor(0.2f, 1f, 0.2f, 0.6f);
-                } else {
+                if (destroyPreview || !placeable) {
                     shaper.setColor(1f, 0.2f, 0.2f, 0.6f);
+                } else {
+                    shaper.setColor(0.2f, 1f, 0.2f, 0.6f);
                 }
                 shaper.rectLine((preview.endAx + 0.5f) * Const.TILE_SIZE, (preview.endAy + 0.5f) * Const.TILE_SIZE,
                         (preview.endBx + 0.5f) * Const.TILE_SIZE, (preview.endBy + 0.5f) * Const.TILE_SIZE, 2);
@@ -3796,6 +3844,7 @@ public class Game extends GameScene {
                 continue;
             }
 
+            boolean destroyPreview = preview.previewType == RemotePreviewType.DESTROY;
             if (preview.endBx > -1) {
                 float factorA = (preview.activeEnd == 1 ? 1.35f : 1f);
                 float widthA = endMarkerA.getRegionWidth() * factorA;
@@ -3824,6 +3873,9 @@ public class Game extends GameScene {
                 float factorA = (preview.activeEnd == 1 ? 1.35f : 1f);
                 float widthA = endMarkerA.getRegionWidth() * factorA;
                 float heightA = endMarkerA.getRegionHeight() * factorA;
+                if (destroyPreview) {
+                    batch.setColor(1f, 0.5f, 0.5f, 1f);
+                }
                 batch.draw(endMarkerA, (preview.endAx + 0.5f) * Const.TILE_SIZE - widthA / 2,
                         (preview.endAy + 0.2f * 1 / factorA) * Const.TILE_SIZE, widthA, heightA);
             }
@@ -4841,6 +4893,7 @@ public class Game extends GameScene {
         endA.x = -1;
         endB.x = -1;
         activeStructureTrail.clear();
+        clearRemotePlacementPreviewIfNeeded();
     }
 
     public void resetActiveTile() {
@@ -5360,9 +5413,9 @@ public class Game extends GameScene {
         return result;
     }
 
-    private void updateRemotePlacementPreview(long clientId, int previewLayer, boolean visible, boolean placeable,
-            boolean canAfford, int endAx, int endAy, int endBx, int endBy, int activeEnd,
-            List<Structure<?>> structures) {
+    private void updateRemotePlacementPreview(long clientId, RemotePreviewType previewType, int previewLayer,
+            boolean visible, boolean placeable, boolean canAfford, int endAx, int endAy, int endBx, int endBy,
+            int activeEnd, List<Structure<?>> structures) {
         synchronized (remotePlacementPreviewLock) {
             if (!visible) {
                 remotePlacementPreviews.remove(clientId);
@@ -5374,8 +5427,8 @@ public class Game extends GameScene {
                 return;
             }
 
-            remotePlacementPreviews.put(clientId, new RemotePlacementPreviewState(clientId, previewLayer, true,
-                    placeable, canAfford, endAx, endAy, endBx, endBy, activeEnd, new ArrayList<>(structures)));
+            remotePlacementPreviews.put(clientId, new RemotePlacementPreviewState(clientId, previewType, previewLayer,
+                    true, placeable, canAfford, endAx, endAy, endBx, endBy, activeEnd, new ArrayList<>(structures)));
         }
     }
 
@@ -5399,13 +5452,15 @@ public class Game extends GameScene {
         }
     }
 
-    private long computePlacementPreviewSignature(boolean visible, boolean placeable, boolean canAfford,
-            int previewLayer, int endAx, int endAy, int endBx, int endBy, int activeEnd, List<CompoundTag> structures) {
+    private long computePlacementPreviewSignature(boolean visible, RemotePreviewType previewType, boolean placeable,
+            boolean canAfford, int previewLayer, int endAx, int endAy, int endBx, int endBy, int activeEnd,
+            List<CompoundTag> structures) {
         if (!visible) {
             return Long.MIN_VALUE;
         }
 
         long hash = 0xcbf29ce484222325L;
+        hash = mixPlacementPreviewSignature(hash, previewType.ordinal());
         hash = mixPlacementPreviewSignature(hash, previewLayer);
         hash = mixPlacementPreviewSignature(hash, placeable);
         hash = mixPlacementPreviewSignature(hash, canAfford);
@@ -5426,11 +5481,8 @@ public class Game extends GameScene {
             return;
         }
 
-        boolean visible = layer != null && activeStructure != null
-                && (activeStructure.x > -1 || endA.x > -1)
-                && !structureDestroyMode && !cableDestroyMode
-                && !bulkDestroyMode && !bulkCableMode
-                && !copyMode && !pasteMode;
+        RemotePreviewType previewType = getLocalPreviewType();
+        boolean visible = layer != null && previewType != null;
 
         if (!visible) {
             if (localPlacementPreviewSignature != Long.MIN_VALUE) {
@@ -5448,24 +5500,29 @@ public class Game extends GameScene {
         boolean canAfford = ui != null && ui.canAffordStructure;
 
         ArrayList<CompoundTag> structures = new ArrayList<>();
-        if (endB.x > -1) {
-            for (Structure<?> s : activeStructureTrail.values()) {
-                structures.add(copyPlacementPreviewStructure(s));
+        if (previewType == RemotePreviewType.BUILD) {
+            if (endB.x > -1) {
+                for (Structure<?> s : activeStructureTrail.values()) {
+                    structures.add(copyPlacementPreviewStructure(s));
+                }
+            } else {
+                structures.add(copyPlacementPreviewStructure(activeStructure));
             }
         } else {
-            structures.add(copyPlacementPreviewStructure(activeStructure));
+            structures.addAll(copyDestroyPreviewStructures());
         }
 
-        long signature = computePlacementPreviewSignature(true, placeable, canAfford, layerIndex, (int) endA.x,
-                (int) endA.y, (int) endB.x, (int) endB.y, activeEnd, structures);
+        long signature = computePlacementPreviewSignature(true, previewType, placeable, canAfford, layerIndex,
+                (int) endA.x, (int) endA.y, (int) endB.x, (int) endB.y, activeEnd, structures);
         if (signature == localPlacementPreviewSignature) {
             return;
         }
         localPlacementPreviewSignature = signature;
 
         NBT.Builder cmd = new NBT.Builder("Command")
-                .String("kind", "build_preview")
+                .String("kind", previewType == RemotePreviewType.BUILD ? "build_preview" : "destroy_preview")
                 .Int("layer", layerIndex)
+                .String("previewType", previewType.name())
                 .Byte("visible", (byte) 1)
                 .Byte("placeable", (byte) (placeable ? 1 : 0))
                 .Byte("canAfford", (byte) (canAfford ? 1 : 0))
@@ -5480,6 +5537,77 @@ public class Game extends GameScene {
         }
         cmd.End();
         emitLanCommand(cmd.Get());
+    }
+
+    private void clearRemotePlacementPreviewIfNeeded() {
+        if (lanSession == null || localPlacementPreviewSignature == Long.MIN_VALUE) {
+            return;
+        }
+        localPlacementPreviewSignature = Long.MIN_VALUE;
+        NBT.Builder cmd = new NBT.Builder("Command")
+                .String("kind", "build_preview")
+                .Int("layer", layerIndex)
+                .Byte("visible", (byte) 0);
+        emitLanCommand(cmd.Get());
+    }
+
+    private RemotePreviewType getLocalPreviewType() {
+        if (layer == null) {
+            return null;
+        }
+
+        if (activeStructure != null && !structureDestroyMode && !cableDestroyMode && !bulkDestroyMode
+                && !bulkCableMode && !copyMode && !pasteMode && (activeStructure.x > -1 || endA.x > -1)) {
+            return RemotePreviewType.BUILD;
+        }
+
+        if ((structureDestroyMode || cableDestroyMode)
+                && activeStructure != null
+                && activeStructure.x > -1
+                && !activeStructure.getSchema().has(Flags.Indestructible)) {
+            return RemotePreviewType.DESTROY;
+        }
+
+        if ((bulkDestroyMode || bulkCableMode) && endA.x > -1) {
+            return RemotePreviewType.DESTROY;
+        }
+
+        return null;
+    }
+
+    private List<CompoundTag> copyDestroyPreviewStructures() {
+        ArrayList<CompoundTag> structures = new ArrayList<>();
+
+        if (structureDestroyMode || cableDestroyMode) {
+            Structure<?> target = getDestroyPreviewTarget();
+            if (target != null) {
+                structures.add(copyPlacementPreviewStructure(target));
+            }
+            return structures;
+        }
+
+        return structures;
+    }
+
+    private Structure<?> getDestroyPreviewTarget() {
+        if (layer == null || activeStructure == null) {
+            return null;
+        }
+
+        if (activeStructure.x < 0) {
+            return null;
+        }
+
+        if (structureDestroyMode && !activeStructure.getSchema().has(Flags.Indestructible)) {
+            return activeStructure;
+        }
+
+        if (cableDestroyMode && activeStructure instanceof CopperCable
+                && !activeStructure.getSchema().has(Flags.Indestructible)) {
+            return activeStructure;
+        }
+
+        return null;
     }
 
 }

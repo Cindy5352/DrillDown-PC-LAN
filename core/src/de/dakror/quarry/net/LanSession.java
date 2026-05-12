@@ -280,7 +280,7 @@ public final class LanSession {
                     broadcastCommand(tag, fromClientId);
                 }
                 return;
-            } else if ("build_preview".equals(kind)) {
+            } else if ("build_preview".equals(kind) || "destroy_preview".equals(kind)) {
                 game.applyLanPlacementPreview(tag);
                 if (host) {
                     broadcastCommand(tag, fromClientId);
