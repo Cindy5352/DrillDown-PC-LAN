@@ -1764,6 +1764,7 @@ public class Game extends GameScene {
     int hoverTileX, hoverTileY;
 
     private int gameSpeed = 1;
+    private static final int[] GAME_SPEEDS = { 1, 2, 4 };
     private boolean gamePaused = false;
 
     private boolean startNewGame;
@@ -1964,6 +1965,7 @@ public class Game extends GameScene {
         currentGameName = null;
         setPaused(false);
         reset();
+        setSpeed(1);
 
         lastAutosave = System.currentTimeMillis();
         addScience(ScienceType.Start);
@@ -2228,7 +2230,7 @@ public class Game extends GameScene {
                     ui.pauseButton.setChecked(isPaused());
                 }
             } else if ("speed".equals(kind)) {
-                gameSpeed = command.Int("speed", 1);
+                setSpeed(command.Int("speed", 1));
             } else if ("build".equals(kind) || "build_batch".equals(kind)) {
                 applyLanBuildBatch(command);
             } else if ("destroy".equals(kind)) {
@@ -5085,19 +5087,35 @@ public class Game extends GameScene {
     }
 
     public void play() {
-        gamePaused = false;
-        gameSpeed = 1;
-        if (lanSession != null && !lanApplyingCommand) {
-            NBT.Builder cmd = new NBT.Builder("Command")
-                    .String("kind", "pause")
-                    .Byte("paused", (byte) 0);
-            emitLanCommand(cmd.Get());
-        }
+        setPaused(false);
     }
 
     public void resetSpeed() {
-        gameSpeed = 1;
-        if (lanSession != null && !lanApplyingCommand) {
+        setSpeed(1);
+    }
+
+    public void increaseSpeed() {
+        if (gameSpeed < 2) {
+            setSpeed(2);
+        } else {
+            setSpeed(4);
+        }
+    }
+
+    public int getSpeed() {
+        return gameSpeed;
+    }
+
+    public void setSpeed(int speed) {
+        int normalized = normalizeSpeed(speed);
+        int previous = gameSpeed;
+        gameSpeed = normalized;
+
+        if (ui != null) {
+            ui.setSpeedSelection(normalized);
+        }
+
+        if (normalized != previous && lanSession != null && !lanApplyingCommand) {
             NBT.Builder cmd = new NBT.Builder("Command")
                     .String("kind", "speed")
                     .Int("speed", gameSpeed);
@@ -5105,14 +5123,14 @@ public class Game extends GameScene {
         }
     }
 
-    public void increaseSpeed() {
-        gameSpeed = Math.min(gameSpeed * 2, 100);
-        if (lanSession != null && !lanApplyingCommand) {
-            NBT.Builder cmd = new NBT.Builder("Command")
-                    .String("kind", "speed")
-                    .Int("speed", gameSpeed);
-            emitLanCommand(cmd.Get());
+    private int normalizeSpeed(int speed) {
+        for (int i = GAME_SPEEDS.length - 1; i >= 0; i--) {
+            if (speed >= GAME_SPEEDS[i]) {
+                return GAME_SPEEDS[i];
+            }
         }
+
+        return 1;
     }
 
     public int getItemCount() {

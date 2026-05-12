@@ -248,6 +248,8 @@ public class GameUi implements Ui {
     public ImageButton destroyButton;
     ImageButton cableRemoveButton;
     public ImageButton pauseButton;
+    Button speedButton1, speedButton2, speedButton4;
+    ButtonGroup<Button> speedButtons;
     ImageButton copyButton;
 
     // Resources
@@ -633,7 +635,6 @@ public class GameUi implements Ui {
             @Override
             public void clicked(InputEvent event, float x, float y) {
                 Quarry.Q.sound.play(Quarry.Q.clickSfx);
-                Game.G.resetSpeed();
                 Game.G.setPaused(pauseButton.isChecked());
             }
         }, "button.pause");
@@ -644,6 +645,34 @@ public class GameUi implements Ui {
         pauseButton.setPosition(24 + Const.BUILD_RING_ITEM_SIZE, Const.UI_H - (Const.BUILD_RING_ITEM_SIZE + 12));
         pauseButton.setName("pauseButton");
         stage.addActor(pauseButton);
+
+        speedButtons = new ButtonGroup<>();
+        speedButtons.setMinCheckCount(1);
+        speedButtons.setMaxCheckCount(1);
+        speedButtons.setUncheckLast(true);
+
+        float speedButtonY = Const.UI_H - (Const.BUILD_RING_ITEM_SIZE + 12);
+        float speedButtonGap = 10f;
+        float speedButtonWidth = Const.BUILD_RING_ITEM_SIZE * 3f + speedButtonGap * 2f;
+        float speedButtonX = Const.UI_W / 2f - speedButtonWidth / 2f;
+
+        speedButton1 = createSpeedButton(skin, "1x", 1);
+        speedButton1.setPosition(speedButtonX, speedButtonY);
+        speedButton1.setName("speedButton1");
+        stage.addActor(speedButton1);
+
+        speedButton2 = createSpeedButton(skin, "2x", 2);
+        speedButton2.setPosition(speedButtonX + Const.BUILD_RING_ITEM_SIZE + speedButtonGap, speedButtonY);
+        speedButton2.setName("speedButton2");
+        stage.addActor(speedButton2);
+
+        speedButton4 = createSpeedButton(skin, "4x", 4);
+        speedButton4.setPosition(speedButtonX + (Const.BUILD_RING_ITEM_SIZE + speedButtonGap) * 2f, speedButtonY);
+        speedButton4.setName("speedButton4");
+        stage.addActor(speedButton4);
+
+        speedButtons.add(speedButton1, speedButton2, speedButton4);
+        setSpeedSelection(Game.G.getSpeed());
     }
 
     public void rotateActiveStructure() {
@@ -1499,6 +1528,44 @@ public class GameUi implements Ui {
         ib.getImageCell().size(60);
         ib.addListener(new TextTooltip(Quarry.Q.i18n.get(tooltip), skin));
         return ib;
+    }
+
+    protected Button createSpeedButton(Skin skin, String text, final int speed) {
+        Button button = new Button();
+        ButtonStyle style = new ButtonStyle();
+        style.up = skin.getDrawable("round_metal");
+        style.down = skin.getDrawable("round_metalDark");
+        style.checked = skin.getDrawable("round_metalActive");
+        style.over = skin.getDrawable("round_metalDark");
+        style.disabled = skin.getDrawable("round_metalDisabled");
+        button.setStyle(style);
+        button.setSize(Const.BUILD_RING_ITEM_SIZE, Const.BUILD_RING_ITEM_SIZE);
+        button.setUserObject(speed);
+
+        Label label = new Label(text, skin);
+        label.setAlignment(Align.center);
+        button.add(label).expand().fill();
+
+        button.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                if (((Button) actor).isChecked()) {
+                    Game.G.setSpeed(speed);
+                }
+            }
+        });
+
+        return button;
+    }
+
+    public void setSpeedSelection(int speed) {
+        if (speedButton1 == null || speedButton2 == null || speedButton4 == null) {
+            return;
+        }
+
+        speedButton1.setChecked(speed <= 1);
+        speedButton2.setChecked(speed == 2);
+        speedButton4.setChecked(speed >= 4);
     }
 
     @Override
