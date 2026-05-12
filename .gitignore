@@ -137,3 +137,4 @@ local.properties
 gradle.properties
 agent.md
 /distribute/output/
+.github/
